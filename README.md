@@ -227,7 +227,8 @@ staff.create
 staff.update
 staff.delete
 
-activity_logs.view
+activity_logs.view_all
+activity_logs.view_domain
 ```
 
 The application flow is:
@@ -269,7 +270,7 @@ Reviews
 Payments
 Finance
 Staff
-Activity Logs
+Activity Logs (All Domains)
 Admin Settings
 ```
 
@@ -284,6 +285,7 @@ Categories
 Inventory
 Stock History
 Low Stock
+Activity Logs (Product & Inventory Domain)
 ```
 
 ### Order Manager
@@ -296,6 +298,7 @@ Orders
 Shipments
 Returns & Refunds
 Customers
+Activity Logs (Orders, Shipments & Returns Domain)
 ```
 
 ### Customer Support Executive
@@ -307,6 +310,7 @@ Dashboard
 Customers
 Support Requests
 Order Lookup
+Activity Logs (Support Domain)
 ```
 
 ### Marketing Manager
@@ -318,6 +322,7 @@ Dashboard
 Coupons
 Reviews
 Marketing Analytics
+Activity Logs (Marketing & Reviews Domain)
 ```
 
 ### Finance Manager
@@ -330,6 +335,7 @@ Payments
 Refunds
 Financial Reports
 Order Financials
+Activity Logs (Finance & Payments Domain)
 ```
 
 ## Recommended Routes
@@ -553,11 +559,32 @@ Requested operation
 
 Hiding a button is not sufficient security.
 
-## Auditability
+## Auditability & Activity Logs
 
-Management actions should be designed with staff activity logging in mind.
+Management actions must be designed with staff activity logging in mind to ensure accountability and traceability.
 
-Examples:
+### Domain-Scoped Log Access Policy
+
+1. **Super Admin Access (`activity_logs.view_all`)**: Super Admin can view global activity logs across all system domains and filter across any domain.
+2. **Staff Domain Access (`activity_logs.view_domain`)**: Staff members can **only view activity logs corresponding to their assigned operational domain** (e.g., Order Managers only see order/shipping logs, Product Managers only see catalog/inventory changes, Support only sees ticket activities).
+3. **Server-Side Enforcement**: Backend queries to `/api/v1/activity-logs` must strictly enforce domain filtering based on the authenticated staff member's assigned role and ignore any unauthorized client domain overrides.
+
+### Activity Log Structure
+
+Each activity log entry in the `staff activity logs` collection should contain:
+
+```text
+- staffId / staffName
+- staffRole
+- domain ('orders' | 'products' | 'inventory' | 'support' | 'marketing' | 'finance' | 'staff' | 'auth')
+- action ('products.create', 'orders.status_update', etc.)
+- resourceId
+- details / diff (e.g., before and after state)
+- ipAddress / userAgent
+- timestamp
+```
+
+### Auditable Actions (Examples)
 
 ```text
 Staff login/logout
@@ -573,7 +600,7 @@ Staff creation/update/deactivation
 Permission/role changes
 ```
 
-Authorized users should have access to an activity-log interface.
+Authorized staff access domain logs through their specific module views or scoped activity log tabs, while Super Admins have access to the dedicated global `/activity-logs` management interface.
 
 ## UI Principles
 
@@ -745,7 +772,7 @@ Once this foundation is stable, the individual management modules can be impleme
 5. Permissions should be action-oriented.
 6. Navigation should be generated from permissions.
 7. Destructive operations should require confirmation.
-8. Important management actions should be auditable.
+8. Important management actions should be auditable; activity logs must be strictly domain-scoped for staff and only globally accessible by Super Admins.
 9. Financial values and other authoritative business data must come from the backend.
 10. Never trust client-supplied permissions, prices, totals, roles, or other security-sensitive values.
 
