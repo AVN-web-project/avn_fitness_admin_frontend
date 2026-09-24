@@ -8,10 +8,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   PackageX,
-  PackageCheck,
-  TrendingDown,
   Layers,
-  ArrowUpRight,
+  EyeOff,
 } from 'lucide-react';
 import { inventoryApi } from '../../services/inventoryApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
@@ -19,7 +17,6 @@ import DataTable from '../../components/common/DataTable.jsx';
 import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import SearchInput from '../../components/common/SearchInput.jsx';
-import StatusBadge from '../../components/common/StatusBadge.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';
 
 export const InventoryPage = () => {
@@ -27,8 +24,8 @@ export const InventoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'lowStock', 'outOfStock'
-  const [metaCounts, setMetaCounts] = useState({ lowStock: 0, outOfStock: 0, total: 0 });
+  const [filterType, setFilterType] = useState('all'); // 'all', 'lowStock', 'outOfStock', 'inactive'
+  const [metaCounts, setMetaCounts] = useState({ lowStock: 0, outOfStock: 0, inactive: 0, total: 0 });
   const debouncedSearch = useDebounce(search, 300);
 
   // Stock Edit Modal State
@@ -52,17 +49,20 @@ export const InventoryPage = () => {
 
       const res = await inventoryApi.getInventoryList(params);
 
-      // Handle items from inventory_m directly or fallback product variants
+      // Handle items from backend directly or fallback
       let inventoryList = [];
       if (Array.isArray(res.items)) {
         inventoryList = res.items;
       } else if (Array.isArray(res.products)) {
-        // Flatten product variants if fallback endpoint was queried
         inventoryList = res.products.flatMap((prod) =>
           (prod.variants || []).map((v) => ({
             _id: v._id || `${prod._id}-${v.sku}`,
             product: prod._id,
+            productId: prod._id,
             productName: prod.name,
+            productStatus: prod.status || (prod.isActive === false ? 'inactive' : 'active'),
+            isProductActive: prod.status !== 'inactive' && prod.isActive !== false,
+            category: prod.category?.name || prod.category || 'General Gear',
             sku: v.sku,
             variantTitle: v.title || `${v.size || ''} ${v.color || ''}`.trim() || 'Standard',
             size: v.size || 'Standard',
@@ -70,6 +70,7 @@ export const InventoryPage = () => {
             stockQuantity: v.stockQuantity !== undefined ? v.stockQuantity : v.stock || 0,
             lowStockThreshold: 5,
             price: v.price || prod.price || 0,
+            isAvailable: v.isAvailable !== false && v.isActive !== false,
             lastRestockedAt: prod.updatedAt,
           }))
         );
@@ -77,21 +78,36 @@ export const InventoryPage = () => {
         inventoryList = res;
       }
 
-      // Filter for out of stock if active
-      if (filterType === 'outOfStock') {
-        inventoryList = inventoryList.filter((item) => Number(item.stockQuantity) === 0);
-      }
+      // Calculate stats across full inventory set
+      const lowCount =
+        res.lowStockCount ??
+        inventoryList.filter(
+          (i) =>
+            (Number(i.stockQuantity) || 0) <= (Number(i.lowStockThreshold) || 5) &&
+            Number(i.stockQuantity) > 0
+        ).length;
+      const outCount =
+        res.outOfStockCount ??
+        inventoryList.filter((i) => (Number(i.stockQuantity) || 0) === 0).length;
+      const inactCount =
+        res.inactiveProductSkusCount ??
+        inventoryList.filter((i) => i.productStatus === 'inactive' || i.isProductActive === false).length;
 
-      setItems(inventoryList);
-
-      // Calculate stats
-      const lowCount = res.lowStockCount ?? inventoryList.filter((i) => (Number(i.stockQuantity) || 0) <= (Number(i.lowStockThreshold) || 5) && Number(i.stockQuantity) > 0).length;
-      const outCount = res.outOfStockCount ?? inventoryList.filter((i) => (Number(i.stockQuantity) || 0) === 0).length;
       setMetaCounts({
         total: res.total || inventoryList.length,
         lowStock: lowCount,
         outOfStock: outCount,
+        inactive: inactCount,
       });
+
+      // Filter based on active tab
+      if (filterType === 'outOfStock') {
+        inventoryList = inventoryList.filter((item) => Number(item.stockQuantity) === 0);
+      } else if (filterType === 'inactive') {
+        inventoryList = inventoryList.filter((item) => item.productStatus === 'inactive' || item.isProductActive === false);
+      }
+
+      setItems(inventoryList);
     } catch (err) {
       setError(err.message || 'Failed to fetch inventory from database.');
     } finally {
@@ -141,6 +157,23 @@ export const InventoryPage = () => {
     setNewStock((prev) => Math.max(0, prev + delta));
   };
 
+  const handleAvailabilityChange = async (sku, isAvailable) => {
+    try {
+      // Optimistic UI update
+      setItems((prev) =>
+        prev.map((item) => (item.sku === sku ? { ...item, isAvailable } : item))
+      );
+
+      await inventoryApi.updateProductAvailability(sku, isAvailable);
+
+      setSuccessToast(`Product status for ${sku} updated to ${isAvailable ? 'Available' : 'Unavailable'}.`);
+      setTimeout(() => setSuccessToast(''), 4000);
+    } catch (err) {
+      setError(err.message || 'Failed to update product status.');
+      await fetchInventory();
+    }
+  };
+
   const columns = [
     {
       header: 'SKU Code',
@@ -157,12 +190,21 @@ export const InventoryPage = () => {
       header: 'Product & Variant',
       key: 'productName',
       render: (row) => (
-        <div>
+        <div className="space-y-0.5">
           <div className="font-semibold text-slate-900 dark:text-slate-100">{row.productName}</div>
           <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             {row.variantTitle || `${row.size || ''} ${row.color || ''}`.trim() || 'Standard Variant'}
           </div>
         </div>
+      ),
+    },
+    {
+      header: 'Category',
+      key: 'category',
+      render: (row) => (
+        <span className="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          {row.category || 'General Gear'}
+        </span>
       ),
     },
     {
@@ -220,18 +262,34 @@ export const InventoryPage = () => {
       },
     },
     {
-      header: 'Stock Status',
-      key: 'status',
+      header: 'Product Status',
+      key: 'isAvailable',
       render: (row) => {
-        const qty = Number(row.stockQuantity) || 0;
-        const threshold = Number(row.lowStockThreshold) || 5;
-        if (qty === 0) {
-          return <StatusBadge status="danger" text="Out of Stock" />;
+        const isProdInactive = row.productStatus === 'inactive' || row.isProductActive === false;
+        const isAvail = row.isAvailable !== false;
+
+        if (isProdInactive) {
+          return (
+            <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+              Inactive
+            </span>
+          );
         }
-        if (qty <= threshold) {
-          return <StatusBadge status="warning" text="Low Stock" />;
-        }
-        return <StatusBadge status="success" text="In Stock" />;
+
+        return (
+          <select
+            value={isAvail ? 'available' : 'unavailable'}
+            onChange={(e) => handleAvailabilityChange(row.sku, e.target.value === 'available')}
+            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer border transition-all ${
+              isAvail
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+            }`}
+          >
+            <option value="available">Available</option>
+            <option value="unavailable">Unavailable</option>
+          </select>
+        );
       },
     },
     {
@@ -283,7 +341,7 @@ export const InventoryPage = () => {
       )}
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div
           onClick={() => setFilterType('all')}
           className={`cursor-pointer p-4 rounded-2xl border transition-all ${
@@ -302,7 +360,7 @@ export const InventoryPage = () => {
             {metaCounts.total || items.length}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Active warehouse SKU records
+            Warehouse SKU records
           </p>
         </div>
 
@@ -324,7 +382,7 @@ export const InventoryPage = () => {
             {metaCounts.lowStock}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Quantity ≤ configured threshold
+            Quantity ≤ threshold
           </p>
         </div>
 
@@ -346,14 +404,36 @@ export const InventoryPage = () => {
             {metaCounts.outOfStock}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Zero physical warehouse stock
+            Zero physical inventory
+          </p>
+        </div>
+
+        <div
+          onClick={() => setFilterType('inactive')}
+          className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+            filterType === 'inactive'
+              ? 'bg-rose-50/70 border-rose-300 dark:bg-rose-950/30 dark:border-rose-800 shadow-sm'
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              Inactive
+            </span>
+            <EyeOff className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="mt-2 text-2xl font-bold text-rose-600 dark:text-rose-400">
+            {metaCounts.inactive}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Products marked inactive
           </p>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setFilterType('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
@@ -384,6 +464,16 @@ export const InventoryPage = () => {
           >
             Out of Stock ({metaCounts.outOfStock})
           </button>
+          <button
+            onClick={() => setFilterType('inactive')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              filterType === 'inactive'
+                ? 'bg-rose-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            Inactive ({metaCounts.inactive})
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -391,7 +481,7 @@ export const InventoryPage = () => {
             value={search}
             onChange={setSearch}
             onClear={() => setSearch('')}
-            placeholder="Search by SKU, Product or Variant..."
+            placeholder="Search by SKU, Product, or Category..."
           />
           <Button variant="secondary" size="sm" leftIcon={RefreshCw} onClick={fetchInventory}>
             Sync & Refresh
@@ -408,6 +498,7 @@ export const InventoryPage = () => {
         onRetry={fetchInventory}
         emptyTitle="No inventory records found"
       />
+
 
       {/* Stock Adjustment Modal */}
       <Modal
@@ -426,8 +517,13 @@ export const InventoryPage = () => {
         {selectedItem && (
           <form onSubmit={handleSaveStock} className="space-y-4">
             <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700">
-              <div className="text-xs text-slate-500 dark:text-slate-400">Product</div>
-              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400">Product</span>
+                <span className="text-xs px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium">
+                  {selectedItem.category || 'General Gear'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
                 {selectedItem.productName}
               </div>
               <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">

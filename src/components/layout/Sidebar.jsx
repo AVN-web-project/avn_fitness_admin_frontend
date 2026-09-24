@@ -100,6 +100,9 @@ export const Sidebar = () => {
         PERMISSIONS.FINANCE_REPORTS,
         'payments.view',
         'finance.reports',
+        'refunds.process',
+        'refunds.view',
+        'returns.process',
       ]);
     }
 

@@ -45,8 +45,7 @@ export const SUPPORT_PRIORITY = Object.freeze({
 
 export const PRODUCT_STATUS = Object.freeze({
   ACTIVE: 'active',
-  UNAVAILABLE: 'unavailable',
-  DISCONTINUED: 'discontinued',
+  INACTIVE: 'inactive',
 });
 
 export const REVIEW_STATUS = Object.freeze({
@@ -65,3 +64,14 @@ export const DOMAINS = Object.freeze({
   STAFF: 'staff',
   AUTH: 'auth',
 });
+
+export default {
+  ORDER_STATUS,
+  PAYMENT_STATUS,
+  SHIPMENT_STATUS,
+  SUPPORT_STATUS,
+  SUPPORT_PRIORITY,
+  PRODUCT_STATUS,
+  REVIEW_STATUS,
+  DOMAINS,
+};

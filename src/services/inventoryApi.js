@@ -27,6 +27,16 @@ export const inventoryApi = {
   },
 
   /**
+   * Update product availability status (Available / Unavailable)
+   */
+  updateProductAvailability: async (sku, isAvailable) => {
+    const res = await api.patch(`/inventory/${encodeURIComponent(sku)}`, {
+      isAvailable,
+    });
+    return res.data;
+  },
+
+  /**
    * Legacy / Product-scoped update stock method
    */
   updateInventory: async (productId, sku, stockQuantity) => {

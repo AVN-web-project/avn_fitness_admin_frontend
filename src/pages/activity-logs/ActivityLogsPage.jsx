@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, Activity, Filter } from 'lucide-react';
+import { RefreshCw, Filter } from 'lucide-react';
 import { staffApi } from '../../services/staffApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
@@ -25,11 +25,19 @@ export const ActivityLogsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await staffApi.getActivityLogs({
+
+      const params = {
         page: pagination.page,
         limit: pagination.limit,
-        targetEntity: entityFilter || undefined,
-      });
+      };
+
+      if (entityFilter === 'STAFF' || entityFilter === 'Staff') {
+        params.domain = 'STAFF';
+      } else if (entityFilter) {
+        params.targetEntity = entityFilter;
+      }
+
+      const res = await staffApi.getActivityLogs(params);
 
       setLogs(res.logs || res.items || []);
       if (res.pagination) {
@@ -46,18 +54,136 @@ export const ActivityLogsPage = () => {
     fetchLogs();
   }, [pagination.page, entityFilter]);
 
-  const renderDetails = (details) => {
+  const renderDetails = (details, row) => {
     if (!details || Object.keys(details).length === 0) {
       return <span className="text-slate-400 text-xs">—</span>;
     }
 
+    // 1. Staff Management Audit Event
+    if (
+      row.domain === 'STAFF' ||
+      row.targetEntity === 'Staff' ||
+      row.action?.startsWith('STAFF_') ||
+      details.staffName ||
+      details.staffEmail
+    ) {
+      const prev = details.previousStatus;
+      const next = details.newStatus;
+      const isActive = next === 'Active';
+
+      return (
+        <div className="space-y-1 text-xs">
+          <div>
+            <strong className="text-slate-900 dark:text-slate-100">{details.staffName || 'Staff Member'}</strong>
+            {details.staffEmail && (
+              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.staffEmail})</span>
+            )}
+          </div>
+
+          {details.assignedRole && (
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
+              Role: <span className="font-semibold text-slate-800 dark:text-slate-200">{ROLE_LABELS[details.assignedRole] || details.assignedRole}</span>
+            </div>
+          )}
+
+          {prev && next && (
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <span className="text-slate-500 font-sans">Status:</span>
+              <span className="line-through text-slate-400">{prev}</span>
+              <span>&rarr;</span>
+              <span
+                className={`font-semibold px-1.5 py-0.2 rounded ${
+                  isActive
+                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
+                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
+                }`}
+              >
+                {next}
+              </span>
+            </div>
+          )}
+
+          {details.context && (
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+              {details.context}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // 2. Inventory & Product Status change with SKU
+    if (details.sku && (details.previousStatus || details.newStatus || details.productStatus)) {
+      const prev = details.previousStatus;
+      const next = details.newStatus || details.productStatus;
+      const isAvailable = next === 'Available';
+
+      return (
+        <div className="space-y-1 text-xs">
+          <div className="font-mono">
+            <strong className="text-slate-900 dark:text-slate-100">{details.sku}</strong>
+            {details.productName && (
+              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.productName})</span>
+            )}
+          </div>
+          {prev && next && prev !== next ? (
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <span className="text-slate-500 font-sans">Status:</span>
+              <span className="line-through text-slate-400">{prev}</span>
+              <span>&rarr;</span>
+              <span
+                className={`font-semibold px-1.5 py-0.2 rounded ${
+                  isAvailable
+                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
+                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
+                }`}
+              >
+                {next}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <span className="text-slate-500 font-sans">Status:</span>
+              <span
+                className={`font-semibold px-1.5 py-0.2 rounded ${
+                  isAvailable
+                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
+                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
+                }`}
+              >
+                {next}
+              </span>
+            </div>
+          )}
+          {details.previousStock !== undefined && details.newStock !== undefined && details.previousStock !== details.newStock && (
+            <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400">
+              Stock: <span className="line-through text-slate-400">{details.previousStock}</span> &rarr;{' '}
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{details.newStock} units</span>
+            </div>
+          )}
+          {details.context && (
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+              {details.context}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (details.sku && details.previousStock !== undefined && details.newStock !== undefined) {
       return (
-        <span className="text-xs font-mono text-slate-700 dark:text-slate-300">
-          <strong className="text-slate-900 dark:text-slate-100">{details.sku}</strong>:{' '}
-          <span className="line-through text-slate-400">{details.previousStock}</span> &rarr;{' '}
-          <span className="font-bold text-emerald-600 dark:text-emerald-400">{details.newStock}</span>
-        </span>
+        <div className="space-y-0.5 text-xs font-mono text-slate-700 dark:text-slate-300">
+          <div>
+            <strong className="text-slate-900 dark:text-slate-100">{details.sku}</strong>
+            {details.productName && (
+              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.productName})</span>
+            )}
+          </div>
+          <div>
+            <span className="line-through text-slate-400">{details.previousStock}</span> &rarr;{' '}
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">{details.newStock} units</span>
+          </div>
+        </div>
       );
     }
 
@@ -67,6 +193,10 @@ export const ActivityLogsPage = () => {
           {details.from} &rarr; <strong>{details.to}</strong>
         </span>
       );
+    }
+
+    if (details.context) {
+      return <span className="text-xs text-slate-600 dark:text-slate-300">{details.context}</span>;
     }
 
     return (
@@ -91,10 +221,10 @@ export const ActivityLogsPage = () => {
     },
     {
       header: 'Domain',
-      key: 'targetEntity',
+      key: 'domain',
       render: (row) => (
         <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-mono font-medium text-slate-700 dark:text-slate-300">
-          {row.targetEntity || 'System'}
+          {row.domain === 'STAFF' || row.targetEntity === 'Staff' ? 'Staff' : (row.domain || row.targetEntity || 'System')}
         </span>
       ),
     },
@@ -110,7 +240,7 @@ export const ActivityLogsPage = () => {
     {
       header: 'Audit Context / Changes',
       key: 'details',
-      render: (row) => renderDetails(row.details),
+      render: (row) => renderDetails(row.details, row),
     },
     {
       header: 'Timestamp',
@@ -146,12 +276,14 @@ export const ActivityLogsPage = () => {
               className="text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Domains</option>
+              <option value="STAFF">Staff Management</option>
               <option value="Product">Products & Inventory</option>
               <option value="Category">Categories</option>
               <option value="Order">Orders & Shipments</option>
               <option value="Coupon">Coupons</option>
               <option value="Review">Reviews</option>
               <option value="SupportRequest">Support</option>
+              <option value="Payment">Finance & Payments</option>
               <option value="User">Users</option>
             </select>
           </div>

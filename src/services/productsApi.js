@@ -40,4 +40,16 @@ export const productsApi = {
     const res = await api.patch(`/categories/${id}`, categoryData);
     return res.data;
   },
+
+  /**
+   * Upload an image file for product media
+   */
+  uploadProductImage: async (imageBase64, fileName, altText) => {
+    const res = await api.post('/products/upload-image', {
+      imageBase64,
+      fileName,
+      altText,
+    });
+    return res.data;
+  },
 };
