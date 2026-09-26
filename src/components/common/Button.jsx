@@ -31,6 +31,8 @@ export const Button = ({
       'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 focus:ring-slate-400 shadow-sm',
     danger:
       'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-sm dark:bg-rose-600 dark:hover:bg-rose-500',
+    warning:
+      'bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-500 shadow-sm dark:bg-amber-500 dark:hover:bg-amber-400',
     ghost:
       'bg-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus:ring-slate-400',
     success:

@@ -14,7 +14,7 @@ export function getPermissionsForRole(role) {
  */
 export function hasPermission(userRole, permission, customPermissions = null) {
   if (!userRole) return false;
-  if (userRole === ROLES.SUPER_ADMIN || userRole === ROLES.ADMIN) return true;
+  if (userRole === ROLES.SUPER_ADMIN) return true;
 
   const permissions = Array.isArray(customPermissions) && customPermissions.length > 0
     ? customPermissions
@@ -28,7 +28,7 @@ export function hasPermission(userRole, permission, customPermissions = null) {
  */
 export function hasAnyPermission(userRole, requiredPermissions = [], customPermissions = null) {
   if (!userRole) return false;
-  if (userRole === ROLES.SUPER_ADMIN || userRole === ROLES.ADMIN) return true;
+  if (userRole === ROLES.SUPER_ADMIN) return true;
   if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
   return requiredPermissions.some((perm) => hasPermission(userRole, perm, customPermissions));
@@ -39,7 +39,7 @@ export function hasAnyPermission(userRole, requiredPermissions = [], customPermi
  */
 export function hasAllPermissions(userRole, requiredPermissions = [], customPermissions = null) {
   if (!userRole) return false;
-  if (userRole === ROLES.SUPER_ADMIN || userRole === ROLES.ADMIN) return true;
+  if (userRole === ROLES.SUPER_ADMIN) return true;
   if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
   return requiredPermissions.every((perm) => hasPermission(userRole, perm, customPermissions));

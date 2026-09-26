@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Truck, RotateCcw, DollarSign, CheckCircle2, AlertCircle, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { Truck, CheckCircle2, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
 import { ordersApi } from '../../services/ordersApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
@@ -25,7 +25,7 @@ export const OrdersPage = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [isReturnReviewModalOpen, setIsReturnReviewModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -37,9 +37,9 @@ export const OrdersPage = () => {
   // Status Change Form
   const [newStatus, setNewStatus] = useState('');
 
-  // Refund Form
-  const [refundAmount, setRefundAmount] = useState('');
-  const [refundReason, setRefundReason] = useState('Customer return requested');
+  // Return Review Form
+  const [returnReviewAction, setReturnReviewAction] = useState('approve');
+  const [returnReviewNotes, setReturnReviewNotes] = useState('');
 
   const pagination = usePagination(1, 20);
 
@@ -124,30 +124,30 @@ export const OrdersPage = () => {
     }
   };
 
-  const handleOpenRefund = (order) => {
+  const handleOpenReturnReview = (order, action = 'approve') => {
     setSelectedOrder(order);
-    setRefundAmount(order.pricing?.totalPayable || order.totalAmount || 0);
-    setRefundReason('Customer requested return & refund');
+    setReturnReviewAction(action);
+    setReturnReviewNotes('');
     setActionError('');
-    setIsRefundModalOpen(true);
+    setIsReturnReviewModalOpen(true);
   };
 
-  const handleRefundSubmit = async (e) => {
+  const handleReturnReviewSubmit = async (e) => {
     e.preventDefault();
     if (!selectedOrder) return;
     setActionLoading(true);
     setActionError('');
 
     try {
-      await ordersApi.recordRefund(selectedOrder._id, {
-        amount: Number(refundAmount),
-        reason: refundReason,
+      await ordersApi.reviewReturnRequest(selectedOrder._id, {
+        action: returnReviewAction,
+        notes: returnReviewNotes,
       });
-      setIsRefundModalOpen(false);
+      setIsReturnReviewModalOpen(false);
       setSelectedOrder(null);
       await fetchOrders();
     } catch (err) {
-      setActionError(err.message || 'Failed to process refund.');
+      setActionError(err.message || 'Failed to review return request.');
     } finally {
       setActionLoading(false);
     }
@@ -221,16 +221,26 @@ export const OrdersPage = () => {
             Status
           </Button>
 
-          {row.orderStatus === 'return_requested' || row.orderStatus === 'delivered' ? (
-            <Button
-              variant="danger"
-              size="sm"
-              className="text-xs py-1 px-2"
-              leftIcon={DollarSign}
-              onClick={() => handleOpenRefund(row)}
-            >
-              Refund
-            </Button>
+          {row.orderStatus === 'return_requested' ? (
+            <>
+              <Button
+                variant="primary"
+                size="sm"
+                className="text-xs py-1 px-2"
+                leftIcon={ShieldCheck}
+                onClick={() => handleOpenReturnReview(row, 'approve')}
+              >
+                Accept Return
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="text-xs py-1 px-2"
+                onClick={() => handleOpenReturnReview(row, 'reject')}
+              >
+                Decline Return
+              </Button>
+            </>
           ) : null}
         </div>
       ),
@@ -380,8 +390,9 @@ export const OrdersPage = () => {
               <option value={ORDER_STATUS.SHIPPED}>Shipped</option>
               <option value={ORDER_STATUS.DELIVERED}>Delivered</option>
               <option value={ORDER_STATUS.CANCELLED}>Cancelled</option>
-              <option value={ORDER_STATUS.RETURNED}>Returned</option>
-              <option value={ORDER_STATUS.REFUNDED}>Refunded</option>
+              {newStatus === ORDER_STATUS.RETURNED ? (
+                <option value={ORDER_STATUS.RETURNED}>Returned</option>
+              ) : null}
             </select>
           </div>
 
@@ -396,11 +407,11 @@ export const OrdersPage = () => {
         </form>
       </Modal>
 
-      {/* Record Refund Modal */}
+      {/* Review Return Request Modal */}
       <Modal
-        isOpen={isRefundModalOpen}
-        onClose={() => setIsRefundModalOpen(false)}
-        title="Record Customer Refund"
+        isOpen={isReturnReviewModalOpen}
+        onClose={() => setIsReturnReviewModalOpen(false)}
+        title="Review Return Request"
         maxWidth="max-w-md"
       >
         {actionError && (
@@ -410,41 +421,41 @@ export const OrdersPage = () => {
           </div>
         )}
 
-        <form onSubmit={handleRefundSubmit} className="space-y-4">
+        <form onSubmit={handleReturnReviewSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-              Refund Amount (INR ₹)
+              Decision
             </label>
-            <input
-              type="number"
-              min={1}
-              required
-              value={refundAmount}
-              onChange={(e) => setRefundAmount(e.target.value)}
+            <select
+              value={returnReviewAction}
+              onChange={(e) => setReturnReviewAction(e.target.value)}
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="approve">Accept return</option>
+              <option value="reject">Decline return</option>
+            </select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-              Reason / Remarks
+              Review Notes
             </label>
             <textarea
               rows={3}
               required
-              value={refundReason}
-              onChange={(e) => setRefundReason(e.target.value)}
-              placeholder="e.g. Size mismatch returned in original condition"
+              value={returnReviewNotes}
+              onChange={(e) => setReturnReviewNotes(e.target.value)}
+              placeholder="Add a note about this decision"
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button variant="secondary" onClick={() => setIsRefundModalOpen(false)}>
+              <Button variant="secondary" onClick={() => setIsReturnReviewModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="danger" isLoading={actionLoading} leftIcon={DollarSign}>
-              Process Refund
+            <Button type="submit" variant="primary" isLoading={actionLoading} leftIcon={ShieldCheck}>
+              Save Decision
             </Button>
           </div>
         </form>

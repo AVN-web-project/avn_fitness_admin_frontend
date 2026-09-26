@@ -27,7 +27,7 @@ export const StaffPage = () => {
     name: '',
     email: '',
     password: '',
-    role: ROLES.OPERATIONS,
+    role: ROLES.PRODUCT_INVENTORY_MANAGER,
     phone: '',
   });
 
@@ -65,7 +65,7 @@ export const StaffPage = () => {
         name: '',
         email: '',
         password: '',
-        role: ROLES.OPERATIONS,
+        role: ROLES.PRODUCT_INVENTORY_MANAGER,
         phone: '',
       });
       await fetchStaff();
@@ -101,6 +101,11 @@ export const StaffPage = () => {
           <div className="text-xs text-slate-400">{row.email}</div>
         </div>
       ),
+    },
+    {
+      header: 'Employee ID',
+      key: 'employeeId',
+      render: (row) => <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{row.employeeId || '—'}</span>,
     },
     {
       header: 'Assigned Role',
@@ -177,7 +182,7 @@ export const StaffPage = () => {
           value={search}
           onChange={setSearch}
           onClear={() => setSearch('')}
-          placeholder="Search staff by name or email..."
+          placeholder="Search staff by name, email or employee ID..."
         />
         <Button variant="secondary" size="sm" leftIcon={RefreshCw} onClick={fetchStaff}>
           Refresh
@@ -261,12 +266,11 @@ export const StaffPage = () => {
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value={ROLES.SUPER_ADMIN}>Super Admin (Full Access)</option>
-              <option value={ROLES.OPERATIONS}>Operations Manager</option>
               <option value={ROLES.PRODUCT_INVENTORY_MANAGER}>Product & Inventory Manager</option>
               <option value={ROLES.ORDER_MANAGER}>Order & Logistics Manager</option>
-              <option value={ROLES.CUSTOMER_SUPPORT}>Customer Support Executive</option>
-              <option value={ROLES.MARKETING_MANAGER}>Marketing Manager</option>
-              <option value={ROLES.FINANCE_MANAGER}>Finance Manager</option>
+              <option value={ROLES.CUSTOMER_SUPPORT}>Customer Support Lead</option>
+              <option value={ROLES.MARKETING_MANAGER}>Marketing & Campaigns Lead</option>
+              <option value={ROLES.FINANCE_MANAGER}>Finance & Payouts Lead</option>
             </select>
           </div>
 

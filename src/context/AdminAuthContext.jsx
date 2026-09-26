@@ -74,7 +74,7 @@ export const AdminAuthProvider = ({ children }) => {
     }
   };
 
-  const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.ADMIN;
+  const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN;
 
   return (
     <AdminAuthContext.Provider

@@ -11,8 +11,8 @@ export const supportApi = {
     return res.data;
   },
 
-  updateTicketStatus: async (ticketId, status, priority) => {
-    const res = await api.patch(`/support/operations/${ticketId}/status`, { status, priority });
+  updateTicketStatus: async (ticketId, status) => {
+    const res = await api.patch(`/support/operations/${ticketId}/status`, { status });
     return res.data;
   },
 

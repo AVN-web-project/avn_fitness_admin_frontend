@@ -36,13 +36,6 @@ export const SUPPORT_STATUS = Object.freeze({
   CLOSED: 'closed',
 });
 
-export const SUPPORT_PRIORITY = Object.freeze({
-  LOW: 'low',
-  MEDIUM: 'medium',
-  HIGH: 'high',
-  URGENT: 'urgent',
-});
-
 export const PRODUCT_STATUS = Object.freeze({
   ACTIVE: 'active',
   INACTIVE: 'inactive',
@@ -70,7 +63,7 @@ export default {
   PAYMENT_STATUS,
   SHIPMENT_STATUS,
   SUPPORT_STATUS,
-  SUPPORT_PRIORITY,
+
   PRODUCT_STATUS,
   REVIEW_STATUS,
   DOMAINS,

@@ -54,155 +54,182 @@ export const ActivityLogsPage = () => {
     fetchLogs();
   }, [pagination.page, entityFilter]);
 
+  const DETAIL_LABELS = {
+    staffName: 'Staff',
+    staffEmail: 'Email',
+    assignedRole: 'Role',
+    employeeId: 'Employee ID',
+    phone: 'Phone',
+    sku: 'SKU',
+    productName: 'Product',
+    previousStock: 'Previous Stock',
+    newStock: 'New Stock',
+    previousStatus: 'From Status',
+    newStatus: 'To Status',
+    productStatus: 'Status',
+    statusChanged: 'Status Changed',
+    orderNumber: 'Order',
+    from: 'From',
+    to: 'To',
+    note: 'Note',
+    notes: 'Notes',
+    reason: 'Reason',
+    carrier: 'Carrier',
+    trackingNumber: 'Tracking #',
+    code: 'Code',
+    discountType: 'Discount Type',
+    discountValue: 'Discount Value',
+    variantCount: 'Variants',
+    updatedFields: 'Updated Fields',
+    refundAmount: 'Refund Amount',
+    paymentTransactionId: 'Txn ID',
+    ticketNumber: 'Ticket #',
+    name: 'Name',
+    slug: 'Slug',
+  };
+
+  const LEAD_KEYS = ['staffName', 'sku', 'code', 'orderNumber', 'ticketNumber', 'name'];
+  // Legacy payout references are superseded by the order's Txn ID
+  const HIDDEN_DETAIL_KEYS = ['refundTransactionId'];
+
+  const humanizeDetailKey = (key) =>
+    DETAIL_LABELS[key] ||
+    key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+
+  const formatDetailValue = (value) => {
+    if (value === null || value === undefined || value === '') return '\u2014';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (Array.isArray(value)) return value.length ? value.join(', ') : '\u2014';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+
+  const CHANGE_PAIRS = [
+    { from: 'previousStatus', to: 'newStatus', label: 'Status' },
+    { from: 'previousStock', to: 'newStock', label: 'Stock' },
+    { from: 'from', to: 'to', label: 'Status' },
+  ];
+
+  const renderChangePair = (label, fromValue, toValue) => (
+    <div className="flex items-center gap-1.5 font-mono text-[11px] flex-wrap">
+      <span className="text-slate-500 font-sans">{label}:</span>
+      <span className="line-through text-slate-400">{String(fromValue)}</span>
+      <span>&rarr;</span>
+      <span>{String(toValue)}</span>
+    </div>
+  );
+
   const renderDetails = (details, row) => {
     if (!details || Object.keys(details).length === 0) {
-      return <span className="text-slate-400 text-xs">—</span>;
+      return <span className="text-slate-400 text-xs">\u2014</span>;
     }
 
-    // 1. Staff Management Audit Event
+    const entries = Object.entries(details).filter(
+      ([, v]) => v !== undefined && v !== null && v !== ''
+    );
+    if (entries.length === 0) {
+      return <span className="text-slate-400 text-xs">\u2014</span>;
+    }
+
+    // Change pairs (status / stock) rendered as visual old -> new chips
+    const consumed = new Set(['context']);
+    const changeRows = [];
+    for (const pair of CHANGE_PAIRS) {
+      if (
+        details[pair.from] !== undefined &&
+        details[pair.to] !== undefined &&
+        !consumed.has(pair.from)
+      ) {
+        consumed.add(pair.from);
+        consumed.add(pair.to);
+        changeRows.push(renderChangePair(pair.label, details[pair.from], details[pair.to]));
+      }
+    }
+    // Inventory events sometimes record only productStatus as the "to" value
     if (
-      row.domain === 'STAFF' ||
-      row.targetEntity === 'Staff' ||
-      row.action?.startsWith('STAFF_') ||
-      details.staffName ||
-      details.staffEmail
+      details.sku &&
+      details.previousStatus !== undefined &&
+      details.newStatus === undefined &&
+      details.productStatus !== undefined
     ) {
-      const prev = details.previousStatus;
-      const next = details.newStatus;
-      const isActive = next === 'Active';
-
-      return (
-        <div className="space-y-1 text-xs">
-          <div>
-            <strong className="text-slate-900 dark:text-slate-100">{details.staffName || 'Staff Member'}</strong>
-            {details.staffEmail && (
-              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.staffEmail})</span>
-            )}
-          </div>
-
-          {details.assignedRole && (
-            <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
-              Role: <span className="font-semibold text-slate-800 dark:text-slate-200">{ROLE_LABELS[details.assignedRole] || details.assignedRole}</span>
-            </div>
-          )}
-
-          {prev && next && (
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-slate-500 font-sans">Status:</span>
-              <span className="line-through text-slate-400">{prev}</span>
-              <span>&rarr;</span>
-              <span
-                className={`font-semibold px-1.5 py-0.2 rounded ${
-                  isActive
-                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
-                }`}
-              >
-                {next}
-              </span>
-            </div>
-          )}
-
-          {details.context && (
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-              {details.context}
-            </div>
-          )}
-        </div>
-      );
+      consumed.add('productStatus');
+      changeRows.push(renderChangePair('Status', details.previousStatus, details.productStatus));
     }
 
-    // 2. Inventory & Product Status change with SKU
-    if (details.sku && (details.previousStatus || details.newStatus || details.productStatus)) {
-      const prev = details.previousStatus;
-      const next = details.newStatus || details.productStatus;
-      const isAvailable = next === 'Available';
+    // For refund events the refunded order's Txn ID is the headline; otherwise the subject
+    const isRefundEvent = row.action === 'REFUND_RECORDED';
+    const leadEntry = isRefundEvent && details.paymentTransactionId
+      ? ['paymentTransactionId', details.paymentTransactionId]
+      : entries.find(([k]) => LEAD_KEYS.includes(k));
+    if (leadEntry) consumed.add(leadEntry[0]);
+    const leadSubKey = leadEntry
+      ? (leadEntry[0] === 'staffName' ? 'staffEmail' : 'productName')
+      : null;
+    if (leadSubKey) consumed.add(leadSubKey);
 
-      return (
-        <div className="space-y-1 text-xs">
-          <div className="font-mono">
-            <strong className="text-slate-900 dark:text-slate-100">{details.sku}</strong>
-            {details.productName && (
-              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.productName})</span>
-            )}
-          </div>
-          {prev && next && prev !== next ? (
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-slate-500 font-sans">Status:</span>
-              <span className="line-through text-slate-400">{prev}</span>
-              <span>&rarr;</span>
-              <span
-                className={`font-semibold px-1.5 py-0.2 rounded ${
-                  isAvailable
-                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
-                }`}
-              >
-                {next}
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="text-slate-500 font-sans">Status:</span>
-              <span
-                className={`font-semibold px-1.5 py-0.2 rounded ${
-                  isAvailable
-                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300'
-                }`}
-              >
-                {next}
-              </span>
-            </div>
-          )}
-          {details.previousStock !== undefined && details.newStock !== undefined && details.previousStock !== details.newStock && (
-            <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400">
-              Stock: <span className="line-through text-slate-400">{details.previousStock}</span> &rarr;{' '}
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">{details.newStock} units</span>
-            </div>
-          )}
-          {details.context && (
-            <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-              {details.context}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (details.sku && details.previousStock !== undefined && details.newStock !== undefined) {
-      return (
-        <div className="space-y-0.5 text-xs font-mono text-slate-700 dark:text-slate-300">
-          <div>
-            <strong className="text-slate-900 dark:text-slate-100">{details.sku}</strong>
-            {details.productName && (
-              <span className="text-slate-500 font-sans ml-1 text-[11px]">({details.productName})</span>
-            )}
-          </div>
-          <div>
-            <span className="line-through text-slate-400">{details.previousStock}</span> &rarr;{' '}
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">{details.newStock} units</span>
-          </div>
-        </div>
-      );
-    }
-
-    if (details.from && details.to) {
-      return (
-        <span className="text-xs text-slate-600 dark:text-slate-300 font-mono">
-          {details.from} &rarr; <strong>{details.to}</strong>
-        </span>
-      );
-    }
-
-    if (details.context) {
-      return <span className="text-xs text-slate-600 dark:text-slate-300">{details.context}</span>;
-    }
+    // Remaining key -> value rows: nothing dropped, nothing truncated
+    const remaining = entries.filter(
+      ([k]) => !consumed.has(k) && !HIDDEN_DETAIL_KEYS.includes(k)
+    );
+    const contextEntry = remaining.find(([k]) => k === 'context');
+    const MONO_KEYS = ['employeeId', 'trackingNumber', 'paymentTransactionId', 'refundTransactionId', 'slug', 'ticketNumber'];
 
     return (
-      <span className="text-xs text-slate-500 font-mono line-clamp-1">
-        {JSON.stringify(details).replace(/["{}]/g, ' ')}
-      </span>
+      <div className="space-y-1 text-xs">
+        {isRefundEvent && (
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-500">
+            Refund
+          </span>
+        )}
+        {leadEntry && (
+          <div>
+            {isRefundEvent && details.paymentTransactionId && (
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-500">
+                Txn ID:{' '}
+              </span>
+            )}
+            <span className="font-mono text-slate-900 dark:text-slate-100">
+              {formatDetailValue(leadEntry[1])}
+            </span>
+            {leadSubKey && details[leadSubKey] && (
+              <span className="text-slate-500 font-sans ml-1 text-[11px]">
+                ({formatDetailValue(details[leadSubKey])})
+              </span>
+            )}
+          </div>
+        )}
+
+        {changeRows}
+
+        {isRefundEvent && !details.paymentTransactionId && (
+          <div className="text-[11px] text-slate-400 italic">
+            Txn ID: not captured (refund recorded before this update)
+          </div>
+        )}
+
+        {remaining
+          .filter(([k]) => k !== 'context')
+          .map(([key, value]) => (
+            <div key={key} className="text-[11px] text-slate-600 dark:text-slate-400">
+              <span className="font-medium text-slate-500 dark:text-slate-500">
+                {humanizeDetailKey(key)}:
+              </span>{' '}
+              {key === 'refundAmount' ? (
+                <span className="font-mono">₹{Number(value).toLocaleString('en-IN')}</span>
+              ) : (
+                <span className={MONO_KEYS.includes(key) ? 'font-mono' : ''}>
+                  {formatDetailValue(value)}
+                </span>
+              )}
+            </div>
+          ))}
+
+        {contextEntry && (
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+            {formatDetailValue(contextEntry[1])}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -215,6 +242,9 @@ export const ActivityLogsPage = () => {
           <span className="font-semibold text-slate-900 dark:text-slate-100">{row.userName}</span>
           <span className="block text-[11px] text-blue-600 dark:text-blue-400 font-medium">
             {ROLE_LABELS[row.userRole] || row.userRole}
+          </span>
+          <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+            Emp ID: {row.employeeId || '—'}
           </span>
         </div>
       ),

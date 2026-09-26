@@ -7,7 +7,7 @@ export const ordersApi = {
   },
 
   updateOrderStatus: async (orderId, orderStatus) => {
-    const res = await api.patch(`/operations/orders/${orderId}/status`, { orderStatus });
+    const res = await api.patch(`/operations/orders/${orderId}/status`, { status: orderStatus });
     return res.data;
   },
 
@@ -26,8 +26,4 @@ export const ordersApi = {
     return res.data;
   },
 
-  recordRefund: async (orderId, refundData) => {
-    const res = await api.post(`/operations/orders/${orderId}/refund`, refundData);
-    return res.data;
-  },
 };

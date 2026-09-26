@@ -9,7 +9,7 @@ import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import { usePagination } from '../../hooks/usePagination.js';
 import { formatDate } from '../../utils/formatDate.js';
-import { SUPPORT_STATUS, SUPPORT_PRIORITY } from '../../utils/constants.js';
+import { SUPPORT_STATUS } from '../../utils/constants.js';
 
 export const SupportPage = () => {
   const [tickets, setTickets] = useState([]);
@@ -21,7 +21,6 @@ export const SupportPage = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
   const [ticketStatus, setTicketStatus] = useState('');
-  const [ticketPriority, setTicketPriority] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState('');
 
@@ -54,7 +53,6 @@ export const SupportPage = () => {
   const handleOpenTicket = (ticket) => {
     setSelectedTicket(ticket);
     setTicketStatus(ticket.status || 'open');
-    setTicketPriority(ticket.priority || 'medium');
     setReplyMessage('');
     setReplyError('');
     setIsDetailModalOpen(true);
@@ -68,7 +66,7 @@ export const SupportPage = () => {
 
     try {
       await supportApi.replyToTicket(selectedTicket._id, replyMessage.trim());
-      await supportApi.updateTicketStatus(selectedTicket._id, ticketStatus, ticketPriority);
+      await supportApi.updateTicketStatus(selectedTicket._id, ticketStatus);
       setIsDetailModalOpen(false);
       setSelectedTicket(null);
       await fetchTickets();
@@ -104,11 +102,7 @@ export const SupportPage = () => {
       key: 'user',
       render: (row) => row.user?.name || row.email || 'Customer',
     },
-    {
-      header: 'Priority',
-      key: 'priority',
-      render: (row) => <StatusBadge status={row.priority} customLabel={row.priority} />,
-    },
+
     {
       header: 'Status',
       key: 'status',
@@ -189,67 +183,49 @@ export const SupportPage = () => {
           </div>
         )}
 
-        <div className="space-y-4">
-          {/* Customer Message Details */}
-          <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>From: <strong className="text-slate-800 dark:text-slate-200">{selectedTicket?.user?.name || selectedTicket?.email}</strong></span>
-              <span>{formatDate(selectedTicket?.createdAt)}</span>
-            </div>
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {selectedTicket?.subject}
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">
-              {selectedTicket?.message || selectedTicket?.description}
-            </p>
+        {/* Customer Message Details */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            <span>From: <strong className="text-slate-800 dark:text-slate-200">{selectedTicket?.user?.name || selectedTicket?.email}</strong></span>
+            <span>{formatDate(selectedTicket?.createdAt)}</span>
           </div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {selectedTicket?.subject}
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+            {selectedTicket?.message || selectedTicket?.description}
+          </p>
+        </div>
 
-          {/* Conversation history if any */}
-          {selectedTicket?.replies?.length > 0 && (
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              <div className="text-xs font-semibold uppercase text-slate-400">Previous Replies:</div>
-              {selectedTicket.replies.map((r, i) => (
-                <div key={i} className="p-3 bg-blue-50/50 dark:bg-blue-950/30 rounded-lg text-xs border border-blue-100 dark:border-blue-900/40">
-                  <div className="font-semibold text-blue-700 dark:text-blue-400">{r.senderName || 'Staff Member'}</div>
-                  <div className="text-slate-600 dark:text-slate-300 mt-1">{r.message}</div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Conversation history if any */}
+        {selectedTicket?.replies?.length > 0 && (
+          <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+            <div className="text-xs font-semibold uppercase text-slate-400">Previous Replies:</div>
+            {selectedTicket.replies.map((r, i) => (
+              <div key={i} className="p-3 bg-blue-50/50 dark:bg-blue-950/30 rounded-lg text-xs border border-blue-100 dark:border-blue-900/40">
+                <div className="font-semibold text-blue-700 dark:text-blue-400">{r.senderName || 'Staff Member'}</div>
+                <div className="text-slate-600 dark:text-slate-300 mt-1">{r.message}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {/* Status and Priority pickers */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                Ticket Status
-              </label>
-              <select
-                value={ticketStatus}
-                onChange={(e) => setTicketStatus(e.target.value)}
-                className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value={SUPPORT_STATUS.OPEN}>Open</option>
-                <option value={SUPPORT_STATUS.IN_PROGRESS}>In Progress</option>
-                <option value={SUPPORT_STATUS.RESOLVED}>Resolved</option>
-                <option value={SUPPORT_STATUS.CLOSED}>Closed</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                Priority
-              </label>
-              <select
-                value={ticketPriority}
-                onChange={(e) => setTicketPriority(e.target.value)}
-                className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value={SUPPORT_PRIORITY.LOW}>Low</option>
-                <option value={SUPPORT_PRIORITY.MEDIUM}>Medium</option>
-                <option value={SUPPORT_PRIORITY.HIGH}>High</option>
-                <option value={SUPPORT_PRIORITY.URGENT}>Urgent</option>
-              </select>
-            </div>
+        {/* Status pickers */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+              Ticket Status
+            </label>
+            <select
+              value={ticketStatus}
+              onChange={(e) => setTicketStatus(e.target.value)}
+              className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={SUPPORT_STATUS.OPEN}>Open</option>
+              <option value={SUPPORT_STATUS.IN_PROGRESS}>In Progress</option>
+              <option value={SUPPORT_STATUS.RESOLVED}>Resolved</option>
+              <option value={SUPPORT_STATUS.CLOSED}>Closed</option>
+            </select>
           </div>
 
           {/* Reply Text Form */}

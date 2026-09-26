@@ -162,7 +162,6 @@ export const DashboardPage = () => {
       if (
         isSuperAdmin ||
         user?.role === ROLES.PRODUCT_INVENTORY_MANAGER ||
-        user?.role === ROLES.OPERATIONS ||
         can(PERMISSIONS.INVENTORY_VIEW)
       ) {
         try {
@@ -187,7 +186,7 @@ export const DashboardPage = () => {
 
   // Strictly filter working shortcuts to only those authorized for the current user's role
   const userShortcuts = ALL_SHORTCUTS.filter((item) => {
-    if (isSuperAdmin || user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.ADMIN) return true;
+    if (isSuperAdmin || user?.role === ROLES.SUPER_ADMIN) return true;
     return canAny(item.permissions);
   });
 
@@ -228,12 +227,12 @@ export const DashboardPage = () => {
           icon: DollarSign,
           iconBg: 'bg-emerald-600',
         };
-      case ROLES.OPERATIONS:
+      case ROLES.ORDER_MANAGER:
         return {
-          title: 'Operations & Fulfillment Command',
-          subtitle: 'Oversee inventory stock, orders fulfillment pipeline, shipping tracking, and operations audit trail.',
-          icon: ShieldCheck,
-          iconBg: 'bg-indigo-600',
+          title: 'Order Fulfillment & Dispatch Pipeline',
+          subtitle: 'Process incoming customer orders, manage shipments, confirm delivery, and oversee customer records.',
+          icon: ShoppingCart,
+          iconBg: 'bg-amber-600',
         };
       default:
         return {

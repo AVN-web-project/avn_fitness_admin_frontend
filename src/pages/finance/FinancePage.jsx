@@ -11,7 +11,6 @@ import {
   ArrowUpRight,
   Receipt,
   ShieldCheck,
-  Eye,
   RefreshCw,
   Filter,
   Wallet,
@@ -33,8 +32,11 @@ import { usePagination } from '../../hooks/usePagination.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { formatDate } from '../../utils/formatDate.js';
+import { PERMISSIONS } from '../../permissions/permissions.js';
+import { usePermission } from '../../hooks/usePermission.js';
 
 export const FinancePage = () => {
+  const { can } = usePermission();
   // Navigation Section: 'returns' (Returns & Cancellations) or 'sales' (Sales & Processed Payments)
   const [activeSection, setActiveSection] = useState('returns');
 
@@ -354,12 +356,18 @@ export const FinancePage = () => {
           );
         }
 
-        if (row.orderStatus === 'returned' || row.orderStatus === 'cancelled') {
+        const cancelledOrderPaidOnline =
+          row.orderStatus === 'cancelled' &&
+          row.paymentInfo?.paymentStatus === 'captured' &&
+          row.paymentInfo?.provider !== 'cod';
+        const refundEligible = row.orderStatus === 'returned' || cancelledOrderPaidOnline;
+
+        if (can(PERMISSIONS.REFUNDS_PROCESS) && refundEligible) {
           return (
             <Button
               variant="warning"
               size="sm"
-              className="text-xs py-1 px-2.5"
+              className="min-w-[132px] whitespace-nowrap text-xs font-semibold py-1.5 px-3 shadow-amber-500/20"
               leftIcon={DollarSign}
               onClick={() => handleOpenRefundModal(row)}
             >
@@ -389,6 +397,11 @@ export const FinancePage = () => {
           <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
             {row.transactionId}
           </span>
+          {row.refundTransactionId && (
+            <div className="font-mono text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+              Refund: {row.refundTransactionId}
+            </div>
+          )}
           <div className="text-[11px] text-slate-400 mt-0.5">
             Order: <strong className="text-slate-600 dark:text-slate-300 font-mono">{row.orderNumber}</strong>
           </div>
@@ -464,22 +477,12 @@ export const FinancePage = () => {
       ),
     },
     {
-      header: 'Audit',
-      key: 'actions',
-      align: 'right',
+      header: 'Payment Type',
+      key: 'paymentType',
       render: (row) => (
-        <Button
-          variant="secondary"
-          size="sm"
-          className="text-xs py-1 px-2"
-          leftIcon={Eye}
-          onClick={() => {
-            setSelectedPaymentDetail(row);
-            setIsPaymentDetailModalOpen(true);
-          }}
-        >
-          Inspect
-        </Button>
+        <span className="text-xs text-slate-600 dark:text-slate-400">
+          {row.paymentType || 'Order Payment'}
+        </span>
       ),
     },
   ];
@@ -495,11 +498,10 @@ export const FinancePage = () => {
       {/* Global Toast */}
       {toast.message && (
         <div
-          className={`p-3.5 border rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in ${
-            toast.type === 'success'
+          className={`p-3.5 border rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in ${toast.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
               : 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
-          }`}
+            }`}
         >
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -514,11 +516,10 @@ export const FinancePage = () => {
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">
         <button
           onClick={() => setActiveSection('returns')}
-          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${
-            activeSection === 'returns'
+          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${activeSection === 'returns'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <RotateCcw className="w-4 h-4" />
           1. Returns & Cancellation Requests
@@ -531,11 +532,10 @@ export const FinancePage = () => {
 
         <button
           onClick={() => setActiveSection('sales')}
-          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${
-            activeSection === 'sales'
+          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${activeSection === 'sales'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
+            }`}
         >
           <DollarSign className="w-4 h-4" />
           2. Sales Revenue & Processed Payments
@@ -551,11 +551,10 @@ export const FinancePage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div
               onClick={() => setReturnFilter('return_requested')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                returnFilter === 'return_requested'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'return_requested'
                   ? 'bg-amber-50/70 border-amber-300 dark:bg-amber-950/30 dark:border-amber-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -573,11 +572,10 @@ export const FinancePage = () => {
 
             <div
               onClick={() => setReturnFilter('pending_refund')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                returnFilter === 'pending_refund'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'pending_refund'
                   ? 'bg-rose-50/70 border-rose-300 dark:bg-rose-950/30 dark:border-rose-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
@@ -595,11 +593,10 @@ export const FinancePage = () => {
 
             <div
               onClick={() => setReturnFilter('refunded')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                returnFilter === 'refunded'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'refunded'
                   ? 'bg-emerald-50/70 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -639,41 +636,37 @@ export const FinancePage = () => {
               </span>
               <button
                 onClick={() => setReturnFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  returnFilter === 'all'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'all'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 All Requests ({returnMetrics.totalRequests})
               </button>
               <button
                 onClick={() => setReturnFilter('return_requested')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  returnFilter === 'return_requested'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'return_requested'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 Return Requested ({returnMetrics.returnRequestedCount})
               </button>
               <button
                 onClick={() => setReturnFilter('pending_refund')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  returnFilter === 'pending_refund'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'pending_refund'
                     ? 'bg-rose-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 Pending Refund ({returnMetrics.pendingRefundCount})
               </button>
               <button
                 onClick={() => setReturnFilter('refunded')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  returnFilter === 'refunded'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'refunded'
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 Refund Completed ({returnMetrics.refundedCount})
               </button>
@@ -873,6 +866,10 @@ export const FinancePage = () => {
               onRetry={fetchPaymentsAndSales}
               emptyTitle="No Processed Transactions Found"
               emptyMessage="No payment transactions match your search filter criteria."
+              onRowClick={(row) => {
+                setSelectedPaymentDetail(row);
+                setIsPaymentDetailModalOpen(true);
+              }}
             />
 
             {!paymentLoading && !paymentError && payments.length > 0 && (
@@ -937,11 +934,10 @@ export const FinancePage = () => {
                 <button
                   type="button"
                   onClick={() => setReviewAction('approve')}
-                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
-                    reviewAction === 'approve'
+                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${reviewAction === 'approve'
                       ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 shadow-xs'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                  }`}
+                    }`}
                 >
                   <Check className="w-4 h-4 text-emerald-600" />
                   Approve Return
@@ -949,11 +945,10 @@ export const FinancePage = () => {
                 <button
                   type="button"
                   onClick={() => setReviewAction('reject')}
-                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
-                    reviewAction === 'reject'
+                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${reviewAction === 'reject'
                       ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 shadow-xs'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                  }`}
+                    }`}
                 >
                   <X className="w-4 h-4 text-rose-600" />
                   Reject Return
@@ -1111,11 +1106,17 @@ export const FinancePage = () => {
       <Modal
         isOpen={isPaymentDetailModalOpen}
         onClose={() => setIsPaymentDetailModalOpen(false)}
-        title={`Payment Audit: ${selectedPaymentDetail?.transactionId}`}
+        title={`Payment Details: ${selectedPaymentDetail?.transactionId}`}
       >
         {selectedPaymentDetail && (
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+              <div className="col-span-2">
+                <span className="text-slate-400 block text-[11px]">Payment Type</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedPaymentDetail.paymentType || 'Order Payment'}
+                </span>
+              </div>
               <div>
                 <span className="text-slate-400 block text-[11px]">Associated Order</span>
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
@@ -1171,6 +1172,11 @@ export const FinancePage = () => {
             {selectedPaymentDetail.refundInfo && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl space-y-1">
                 <span className="font-bold text-rose-700 dark:text-rose-300 block">Refund Record</span>
+                {selectedPaymentDetail.refundInfo.refundId && (
+                  <div className="text-slate-600 dark:text-slate-300">
+                    Reference: <strong className="font-mono">{selectedPaymentDetail.refundInfo.refundId}</strong>
+                  </div>
+                )}
                 <div className="text-slate-600 dark:text-slate-300">
                   Amount: <strong className="font-mono">{formatCurrency(selectedPaymentDetail.refundInfo.refundAmount)}</strong>
                 </div>
