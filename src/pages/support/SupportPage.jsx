@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MessageSquare, CheckCircle, RefreshCw, Send, AlertCircle, Clock } from 'lucide-react';
+import { MessageSquare, CheckCircle, RefreshCw, Send, AlertCircle, Clock, Plus } from 'lucide-react';
 import { supportApi } from '../../services/supportApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
@@ -23,6 +23,15 @@ export const SupportPage = () => {
   const [ticketStatus, setTicketStatus] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [newTicket, setNewTicket] = useState({
+    orderNumber: '',
+    subject: '',
+    category: 'order',
+    message: '',
+  });
 
   const pagination = usePagination(1, 20);
 
@@ -77,6 +86,28 @@ export const SupportPage = () => {
     }
   };
 
+  const handleCreateTicket = async (e) => {
+    e.preventDefault();
+    setIsCreatingTicket(true);
+    setCreateError('');
+
+    try {
+      await supportApi.createTicketOnBehalf({
+        ...newTicket,
+        orderNumber: newTicket.orderNumber.trim().toUpperCase(),
+        subject: newTicket.subject.trim(),
+        message: newTicket.message.trim(),
+      });
+      setIsCreateModalOpen(false);
+      setNewTicket({ orderNumber: '', subject: '', category: 'order', message: '' });
+      await fetchTickets();
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create support ticket.');
+    } finally {
+      setIsCreatingTicket(false);
+    }
+  };
+
   const columns = [
     {
       header: 'Ticket #',
@@ -93,10 +124,15 @@ export const SupportPage = () => {
       render: (row) => (
         <div>
           <div className="font-medium text-slate-800 dark:text-slate-200">{row.subject}</div>
-          <div className="text-xs text-slate-400 line-clamp-1">{row.message || row.description}</div>
+            <div className="text-xs text-slate-400 line-clamp-1">{row.initialMessage || row.message || row.description}</div>
         </div>
       ),
     },
+      {
+        header: 'Order',
+        key: 'order',
+        render: (row) => row.order?.orderNumber || 'General',
+      },
     {
       header: 'Customer',
       key: 'user',
@@ -138,7 +174,13 @@ export const SupportPage = () => {
         subtitle="Manage customer inquiries, order assistance, and support tickets."
       />
 
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="primary" size="sm" leftIcon={Plus} onClick={() => {
+          setCreateError('');
+          setIsCreateModalOpen(true);
+        }}>
+          Create for Order
+        </Button>
         <Button variant="secondary" size="sm" leftIcon={RefreshCw} onClick={fetchTickets}>
           Refresh Queue
         </Button>
@@ -222,9 +264,7 @@ export const SupportPage = () => {
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value={SUPPORT_STATUS.OPEN}>Open</option>
-              <option value={SUPPORT_STATUS.IN_PROGRESS}>In Progress</option>
               <option value={SUPPORT_STATUS.RESOLVED}>Resolved</option>
-              <option value={SUPPORT_STATUS.CLOSED}>Closed</option>
             </select>
           </div>
 
@@ -254,6 +294,80 @@ export const SupportPage = () => {
             </div>
           </form>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => !isCreatingTicket && setIsCreateModalOpen(false)}
+        title="Create Ticket for Customer"
+        maxWidth="max-w-xl"
+      >
+        {createError && (
+          <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{createError}</span>
+          </div>
+        )}
+        <form onSubmit={handleCreateTicket} className="space-y-4">
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Order number
+            <input
+              required
+              value={newTicket.orderNumber}
+              onChange={(e) => setNewTicket({ ...newTicket, orderNumber: e.target.value.toUpperCase() })}
+              placeholder="ORD-YYYYMMDD-1234"
+              className="mt-1.5 w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="mt-1 block font-normal text-slate-500">The customer is selected from the order record.</span>
+          </label>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Subject
+            <input
+              required
+              minLength={3}
+              maxLength={200}
+              value={newTicket.subject}
+              onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
+              className="mt-1.5 w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Category
+            <select
+              value={newTicket.category}
+              onChange={(e) => setNewTicket({ ...newTicket, category: e.target.value })}
+              className="mt-1.5 w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="order">Order</option>
+              <option value="payment">Payment</option>
+              <option value="shipping">Shipping</option>
+              <option value="return_refund">Return / Refund</option>
+              <option value="product">Product</option>
+              <option value="general">General</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Customer issue
+            <textarea
+              required
+              minLength={5}
+              maxLength={5000}
+              rows={5}
+              value={newTicket.message}
+              onChange={(e) => setNewTicket({ ...newTicket, message: e.target.value })}
+              placeholder="Summarize the customer's request or issue..."
+              className="mt-1.5 w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+            <Button variant="secondary" onClick={() => setIsCreateModalOpen(false)} disabled={isCreatingTicket}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" isLoading={isCreatingTicket} leftIcon={Plus}>
+              Create Ticket
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

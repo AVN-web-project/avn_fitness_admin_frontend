@@ -31,9 +31,7 @@ export const SHIPMENT_STATUS = Object.freeze({
 
 export const SUPPORT_STATUS = Object.freeze({
   OPEN: 'open',
-  IN_PROGRESS: 'in_progress',
   RESOLVED: 'resolved',
-  CLOSED: 'closed',
 });
 
 export const PRODUCT_STATUS = Object.freeze({

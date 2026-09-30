@@ -179,7 +179,10 @@ export const FinancePage = () => {
     setSelectedOrderForReview(order);
     setReviewAction('approve');
     setReviewNotes('');
-    setCustomRefundAmount(order.pricing?.totalPayable || 0);
+    setCustomRefundAmount(order.returnRequest?.refundAmount || Math.max(
+      0,
+      Number(order.pricing?.totalPayable || 0) - (order.paymentInfo?.provider === 'cod' ? Number(order.pricing?.codSurcharge || 0) : 0)
+    ));
     setActionError('');
     setIsReviewModalOpen(true);
   };
@@ -213,7 +216,10 @@ export const FinancePage = () => {
 
   const handleOpenRefundModal = (order) => {
     setSelectedOrderForRefund(order);
-    const payable = order.returnRequest?.refundAmount || order.pricing?.totalPayable || 0;
+    const payable = order.returnRequest?.refundAmount || Math.max(
+      0,
+      Number(order.pricing?.totalPayable || 0) - (order.paymentInfo?.provider === 'cod' ? Number(order.pricing?.codSurcharge || 0) : 0)
+    );
     setRefundAmountInput(payable);
     setRefundTxnId(`REF-TXN-${Date.now().toString().slice(-6)}`);
     setRefundReason(order.returnRequest?.reason || order.cancellation?.reason || 'Customer refund settlement');
@@ -912,6 +918,20 @@ export const FinancePage = () => {
                   {selectedOrderForReview.shippingAddress?.phone})
                 </span>
               </div>
+              {selectedOrderForReview.paymentInfo?.provider === 'cod' && selectedOrderForReview.returnRequest?.refundAccountDetails && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-2">
+                  <p className="mb-1 font-semibold text-slate-700 dark:text-slate-300">COD refund destination</p>
+                  {selectedOrderForReview.returnRequest.refundAccountDetails.method === 'upi' ? (
+                    <p>UPI ID: {selectedOrderForReview.returnRequest.refundAccountDetails.upiId}</p>
+                  ) : (
+                    <>
+                      <p>Account holder: {selectedOrderForReview.returnRequest.refundAccountDetails.accountHolderName}</p>
+                      <p>Account number: {selectedOrderForReview.returnRequest.refundAccountDetails.accountNumber}</p>
+                      <p>IFSC: {selectedOrderForReview.returnRequest.refundAccountDetails.ifscCode}</p>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Total Order Payable:</span>
                 <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
@@ -964,7 +984,10 @@ export const FinancePage = () => {
                 <input
                   type="number"
                   min="0"
-                  max={selectedOrderForReview.pricing?.totalPayable || 999999}
+                  max={Math.max(
+                    0,
+                    Number(selectedOrderForReview.pricing?.totalPayable || 0) - (selectedOrderForReview.paymentInfo?.provider === 'cod' ? Number(selectedOrderForReview.pricing?.codSurcharge || 0) : 0)
+                  )}
                   value={customRefundAmount}
                   onChange={(e) => setCustomRefundAmount(e.target.value)}
                   className="w-full text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500"
@@ -1039,6 +1062,20 @@ export const FinancePage = () => {
                   {selectedOrderForRefund.paymentInfo?.paymentOrderId || 'Manual / Cash'}
                 </span>
               </div>
+              {selectedOrderForRefund.paymentInfo?.provider === 'cod' && selectedOrderForRefund.returnRequest?.refundAccountDetails && (
+                <div className="border-t border-rose-200 dark:border-rose-800 pt-2">
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">COD refund destination</p>
+                  {selectedOrderForRefund.returnRequest.refundAccountDetails.method === 'upi' ? (
+                    <p>UPI ID: {selectedOrderForRefund.returnRequest.refundAccountDetails.upiId}</p>
+                  ) : (
+                    <>
+                      <p>Account holder: {selectedOrderForRefund.returnRequest.refundAccountDetails.accountHolderName}</p>
+                      <p>Account number: {selectedOrderForRefund.returnRequest.refundAccountDetails.accountNumber}</p>
+                      <p>IFSC: {selectedOrderForRefund.returnRequest.refundAccountDetails.ifscCode}</p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

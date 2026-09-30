@@ -87,7 +87,10 @@ export const OrdersPage = () => {
       await ordersApi.dispatchOrder(selectedOrder._id, {
         carrier,
         trackingNumber,
-        estimatedDeliveryDays: Number(estimatedDeliveryDays),
+        // Backend expects a concrete date (estimatedDeliveryDate), not a day count
+        estimatedDeliveryDate: estimatedDeliveryDays
+          ? new Date(Date.now() + Number(estimatedDeliveryDays) * 86400000).toISOString()
+          : undefined,
       });
       setIsDispatchModalOpen(false);
       setSelectedOrder(null);
@@ -188,6 +191,31 @@ export const OrdersPage = () => {
           {formatCurrency(row.pricing?.totalPayable || row.totalAmount || 0)}
         </span>
       ),
+    },
+    {
+      header: 'Payment / Refund',
+      key: 'paymentInfo',
+      render: (row) => {
+        const provider = String(row.paymentInfo?.provider || 'unknown').toLowerCase();
+        const method = String(row.paymentInfo?.method || '').toUpperCase();
+        const paymentStatus = String(row.paymentInfo?.paymentStatus || 'pending').toLowerCase();
+        const isRefundEligible = row.orderStatus === ORDER_STATUS.CANCELLED &&
+          provider !== 'cod' &&
+          paymentStatus === 'captured';
+
+        return (
+          <div className="space-y-1">
+            <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              {provider === 'mock' ? 'Online test' : provider.toUpperCase()}
+              {method && method !== 'COD' ? ` · ${method}` : ''}
+            </div>
+            <div className="text-[11px] capitalize text-slate-500 dark:text-slate-400">
+              {paymentStatus}
+            </div>
+            {isRefundEligible && <StatusBadge status="success" text="Refund eligible" />}
+          </div>
+        );
+      },
     },
     {
       header: 'Status',
@@ -387,9 +415,7 @@ export const OrdersPage = () => {
             >
               <option value={ORDER_STATUS.PAID_CONFIRMED}>Paid & Confirmed</option>
               <option value={ORDER_STATUS.PROCESSING}>Processing in Warehouse</option>
-              <option value={ORDER_STATUS.SHIPPED}>Shipped</option>
               <option value={ORDER_STATUS.DELIVERED}>Delivered</option>
-              <option value={ORDER_STATUS.CANCELLED}>Cancelled</option>
               {newStatus === ORDER_STATUS.RETURNED ? (
                 <option value={ORDER_STATUS.RETURNED}>Returned</option>
               ) : null}
@@ -451,7 +477,7 @@ export const OrdersPage = () => {
           </div>
 
           <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <Button variant="secondary" onClick={() => setIsReturnReviewModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setIsReturnReviewModalOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" isLoading={actionLoading} leftIcon={ShieldCheck}>

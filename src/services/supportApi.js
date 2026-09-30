@@ -6,6 +6,11 @@ export const supportApi = {
     return res.data;
   },
 
+  createTicketOnBehalf: async (ticketData) => {
+    const res = await api.post('/support/operations/tickets', ticketData);
+    return res.data;
+  },
+
   getTicketDetails: async (ticketId) => {
     const res = await api.get(`/support/${ticketId}`);
     return res.data;
