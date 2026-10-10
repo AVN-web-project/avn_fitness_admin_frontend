@@ -1198,6 +1198,12 @@ export const FinancePage = () => {
                   {formatCurrency((selectedPaymentDetail.tax || 0) + (selectedPaymentDetail.shippingFee || 0))}
                 </span>
               </div>
+              {selectedPaymentDetail.handlingFee > 0 && (
+                <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                  <span>Non-refundable Handling Fee:</span>
+                  <span className="font-mono">{formatCurrency(selectedPaymentDetail.handlingFee)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-slate-100 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <span>Total Net Collected:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400">
@@ -1217,6 +1223,11 @@ export const FinancePage = () => {
                 <div className="text-slate-600 dark:text-slate-300">
                   Amount: <strong className="font-mono">{formatCurrency(selectedPaymentDetail.refundInfo.refundAmount)}</strong>
                 </div>
+                {selectedPaymentDetail.handlingFee > 0 && (
+                  <div className="text-slate-600 dark:text-slate-300">
+                    Handling fee retained: <strong className="font-mono">-{formatCurrency(selectedPaymentDetail.handlingFee)}</strong>
+                  </div>
+                )}
                 <div className="text-slate-500 text-[11px]">
                   Reason: {selectedPaymentDetail.refundInfo.reason}
                 </div>
