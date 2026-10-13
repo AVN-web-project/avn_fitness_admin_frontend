@@ -36,12 +36,19 @@ export const resolveImageUrl = (img) => {
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url;
   }
+  const backendHost = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
   if (url.startsWith('/uploads/')) {
-    const backendHost = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
     return `${backendHost}${url}`;
+  }
+  if (url.startsWith('/placeholder')) {
+    return url;
+  }
+  if (url.startsWith('/')) {
+    return `${backendHost}/uploads/products${url}`;
   }
   return url;
 };
+
 
 export const getProductThumbnailUrl = (product) => {
   if (!product) return '/placeholder-product.png';
