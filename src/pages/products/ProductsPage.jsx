@@ -28,37 +28,17 @@ import SearchInput from '../../components/common/SearchInput.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { PRODUCT_STATUS } from '../../utils/constants.js';
-
-export const resolveImageUrl = (img) => {
-  if (!img) return '/placeholder-product.png';
-  let url = typeof img === 'string' ? img : (img.url || img.image || '');
-  if (!url) return '/placeholder-product.png';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-    return url;
-  }
-  const backendHost = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
-  if (url.startsWith('/uploads/')) {
-    return `${backendHost}${url}`;
-  }
-  if (url.startsWith('/placeholder')) {
-    return url;
-  }
-  if (url.startsWith('/')) {
-    return `${backendHost}/uploads/products${url}`;
-  }
-  return url;
-};
-
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl.js';
 
 export const getProductThumbnailUrl = (product) => {
   if (!product) return '/placeholder-product.png';
   if (Array.isArray(product.images) && product.images.length > 0) {
     const primary = product.images.find((i) => i && (i.isPrimary === true || i.isPrimary === 'true'));
-    if (primary?.url) return resolveImageUrl(primary.url);
-    if (product.images[0]?.url) return resolveImageUrl(product.images[0].url);
-    if (typeof product.images[0] === 'string') return resolveImageUrl(product.images[0]);
+    if (primary?.url) return resolveMediaUrl(primary.url);
+    if (product.images[0]?.url) return resolveMediaUrl(product.images[0].url);
+    if (typeof product.images[0] === 'string') return resolveMediaUrl(product.images[0]);
   }
-  if (product.image) return resolveImageUrl(product.image);
+  if (product.image) return resolveMediaUrl(product.image);
   return '/placeholder-product.png';
 };
 
@@ -1190,7 +1170,7 @@ export const ProductsPage = () => {
                     <div className="w-14 h-14 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
                       {img.url ? (
                         <img
-                          src={resolveImageUrl(img.url)}
+                          src={resolveMediaUrl(img.url)}
                           alt={img.altText || 'Preview'}
                           className="w-full h-full object-cover"
                           onError={(e) => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Truck, CheckCircle2, AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Truck, CheckCircle2, AlertCircle, RefreshCw, ShieldCheck, Eye } from 'lucide-react';
 import { ordersApi } from '../../services/ordersApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
@@ -8,6 +8,8 @@ import Pagination from '../../components/common/Pagination.jsx';
 import SearchInput from '../../components/common/SearchInput.jsx';
 import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
+import OrderDetailsDrawer from '../../components/orders/OrderDetailsDrawer.jsx';
+import { usePermission } from '../../hooks/usePermission.js';
 import { usePagination } from '../../hooks/usePagination.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
@@ -41,7 +43,13 @@ export const OrdersPage = () => {
   const [returnReviewAction, setReturnReviewAction] = useState('approve');
   const [returnReviewNotes, setReturnReviewNotes] = useState('');
 
+  // Complete Order Details Drawer State
+  const [detailsOrder, setDetailsOrder] = useState(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
   const pagination = usePagination(1, 20);
+  const { can } = usePermission();
+  const canViewOrder = can('orders.view');
 
   const fetchOrders = async () => {
     try {
@@ -156,6 +164,11 @@ export const OrdersPage = () => {
     }
   };
 
+  const handleOpenDetails = (order) => {
+    setDetailsOrder(order);
+    setIsDetailsOpen(true);
+  };
+
   const columns = [
     {
       header: 'Order #',
@@ -228,6 +241,18 @@ export const OrdersPage = () => {
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
+          {canViewOrder && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-xs py-1 px-2"
+              leftIcon={Eye}
+              onClick={() => handleOpenDetails(row)}
+            >
+              View
+            </Button>
+          )}
+
           {row.orderStatus === 'paid_confirmed' || row.orderStatus === 'processing' ? (
             <Button
               variant="primary"
@@ -486,6 +511,13 @@ export const OrdersPage = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Complete Order Details Drawer */}
+      <OrderDetailsDrawer
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        order={detailsOrder}
+      />
     </div>
   );
 };
