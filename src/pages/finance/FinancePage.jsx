@@ -179,10 +179,7 @@ export const FinancePage = () => {
     setSelectedOrderForReview(order);
     setReviewAction('approve');
     setReviewNotes('');
-    setCustomRefundAmount(order.returnRequest?.refundAmount || Math.max(
-      0,
-      Number(order.pricing?.totalPayable || 0) - (order.paymentInfo?.provider === 'cod' ? Number(order.pricing?.codSurcharge || 0) : 0)
-    ));
+    setCustomRefundAmount(order.pricing?.totalPayable || 0);
     setActionError('');
     setIsReviewModalOpen(true);
   };
@@ -214,12 +211,13 @@ export const FinancePage = () => {
     }
   };
 
+  // The returns list returns raw order documents, so the payout destination the
+  // customer supplied lives under returnRequest — not at the top level.
+  const refundDest = selectedOrderForRefund?.returnRequest?.refundAccount;
+
   const handleOpenRefundModal = (order) => {
     setSelectedOrderForRefund(order);
-    const payable = order.returnRequest?.refundAmount || Math.max(
-      0,
-      Number(order.pricing?.totalPayable || 0) - (order.paymentInfo?.provider === 'cod' ? Number(order.pricing?.codSurcharge || 0) : 0)
-    );
+    const payable = order.returnRequest?.refundAmount || order.pricing?.totalPayable || 0;
     setRefundAmountInput(payable);
     setRefundTxnId(`REF-TXN-${Date.now().toString().slice(-6)}`);
     setRefundReason(order.returnRequest?.reason || order.cancellation?.reason || 'Customer refund settlement');
@@ -504,10 +502,11 @@ export const FinancePage = () => {
       {/* Global Toast */}
       {toast.message && (
         <div
-          className={`p-3.5 border rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in ${toast.type === 'success'
+          className={`p-3.5 border rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in ${
+            toast.type === 'success'
               ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
               : 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
-            }`}
+          }`}
         >
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -522,10 +521,11 @@ export const FinancePage = () => {
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">
         <button
           onClick={() => setActiveSection('returns')}
-          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${activeSection === 'returns'
+          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${
+            activeSection === 'returns'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+          }`}
         >
           <RotateCcw className="w-4 h-4" />
           1. Returns & Cancellation Requests
@@ -538,10 +538,11 @@ export const FinancePage = () => {
 
         <button
           onClick={() => setActiveSection('sales')}
-          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${activeSection === 'sales'
+          className={`pb-3.5 px-4 text-sm font-semibold transition-all flex items-center gap-2 border-b-2 ${
+            activeSection === 'sales'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}
+          }`}
         >
           <DollarSign className="w-4 h-4" />
           2. Sales Revenue & Processed Payments
@@ -557,10 +558,11 @@ export const FinancePage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div
               onClick={() => setReturnFilter('return_requested')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'return_requested'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                returnFilter === 'return_requested'
                   ? 'bg-amber-50/70 border-amber-300 dark:bg-amber-950/30 dark:border-amber-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                }`}
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -578,10 +580,11 @@ export const FinancePage = () => {
 
             <div
               onClick={() => setReturnFilter('pending_refund')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'pending_refund'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                returnFilter === 'pending_refund'
                   ? 'bg-rose-50/70 border-rose-300 dark:bg-rose-950/30 dark:border-rose-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                }`}
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
@@ -599,10 +602,11 @@ export const FinancePage = () => {
 
             <div
               onClick={() => setReturnFilter('refunded')}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer ${returnFilter === 'refunded'
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                returnFilter === 'refunded'
                   ? 'bg-emerald-50/70 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800 shadow-sm'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                }`}
+              }`}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -642,37 +646,41 @@ export const FinancePage = () => {
               </span>
               <button
                 onClick={() => setReturnFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'all'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  returnFilter === 'all'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                  }`}
+                }`}
               >
                 All Requests ({returnMetrics.totalRequests})
               </button>
               <button
                 onClick={() => setReturnFilter('return_requested')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'return_requested'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  returnFilter === 'return_requested'
                     ? 'bg-amber-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                  }`}
+                }`}
               >
                 Return Requested ({returnMetrics.returnRequestedCount})
               </button>
               <button
                 onClick={() => setReturnFilter('pending_refund')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'pending_refund'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  returnFilter === 'pending_refund'
                     ? 'bg-rose-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                  }`}
+                }`}
               >
                 Pending Refund ({returnMetrics.pendingRefundCount})
               </button>
               <button
                 onClick={() => setReturnFilter('refunded')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${returnFilter === 'refunded'
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  returnFilter === 'refunded'
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
-                  }`}
+                }`}
               >
                 Refund Completed ({returnMetrics.refundedCount})
               </button>
@@ -918,20 +926,6 @@ export const FinancePage = () => {
                   {selectedOrderForReview.shippingAddress?.phone})
                 </span>
               </div>
-              {selectedOrderForReview.paymentInfo?.provider === 'cod' && selectedOrderForReview.returnRequest?.refundAccountDetails && (
-                <div className="border-t border-slate-200 dark:border-slate-700 pt-2">
-                  <p className="mb-1 font-semibold text-slate-700 dark:text-slate-300">COD refund destination</p>
-                  {selectedOrderForReview.returnRequest.refundAccountDetails.method === 'upi' ? (
-                    <p>UPI ID: {selectedOrderForReview.returnRequest.refundAccountDetails.upiId}</p>
-                  ) : (
-                    <>
-                      <p>Account holder: {selectedOrderForReview.returnRequest.refundAccountDetails.accountHolderName}</p>
-                      <p>Account number: {selectedOrderForReview.returnRequest.refundAccountDetails.accountNumber}</p>
-                      <p>IFSC: {selectedOrderForReview.returnRequest.refundAccountDetails.ifscCode}</p>
-                    </>
-                  )}
-                </div>
-              )}
               <div className="flex justify-between">
                 <span className="text-slate-500">Total Order Payable:</span>
                 <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
@@ -954,10 +948,11 @@ export const FinancePage = () => {
                 <button
                   type="button"
                   onClick={() => setReviewAction('approve')}
-                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${reviewAction === 'approve'
+                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
+                    reviewAction === 'approve'
                       ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 shadow-xs'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}
+                  }`}
                 >
                   <Check className="w-4 h-4 text-emerald-600" />
                   Approve Return
@@ -965,10 +960,11 @@ export const FinancePage = () => {
                 <button
                   type="button"
                   onClick={() => setReviewAction('reject')}
-                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${reviewAction === 'reject'
+                  className={`py-2.5 px-4 rounded-xl text-xs font-semibold border flex items-center justify-center gap-2 transition-all ${
+                    reviewAction === 'reject'
                       ? 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 shadow-xs'
                       : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}
+                  }`}
                 >
                   <X className="w-4 h-4 text-rose-600" />
                   Reject Return
@@ -984,10 +980,7 @@ export const FinancePage = () => {
                 <input
                   type="number"
                   min="0"
-                  max={Math.max(
-                    0,
-                    Number(selectedOrderForReview.pricing?.totalPayable || 0) - (selectedOrderForReview.paymentInfo?.provider === 'cod' ? Number(selectedOrderForReview.pricing?.codSurcharge || 0) : 0)
-                  )}
+                  max={selectedOrderForReview.pricing?.totalPayable || 999999}
                   value={customRefundAmount}
                   onChange={(e) => setCustomRefundAmount(e.target.value)}
                   className="w-full text-sm font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500"
@@ -1062,21 +1055,61 @@ export const FinancePage = () => {
                   {selectedOrderForRefund.paymentInfo?.paymentOrderId || 'Manual / Cash'}
                 </span>
               </div>
-              {selectedOrderForRefund.paymentInfo?.provider === 'cod' && selectedOrderForRefund.returnRequest?.refundAccountDetails && (
-                <div className="border-t border-rose-200 dark:border-rose-800 pt-2">
-                  <p className="font-semibold text-slate-700 dark:text-slate-300">COD refund destination</p>
-                  {selectedOrderForRefund.returnRequest.refundAccountDetails.method === 'upi' ? (
-                    <p>UPI ID: {selectedOrderForRefund.returnRequest.refundAccountDetails.upiId}</p>
-                  ) : (
-                    <>
-                      <p>Account holder: {selectedOrderForRefund.returnRequest.refundAccountDetails.accountHolderName}</p>
-                      <p>Account number: {selectedOrderForRefund.returnRequest.refundAccountDetails.accountNumber}</p>
-                      <p>IFSC: {selectedOrderForRefund.returnRequest.refundAccountDetails.ifscCode}</p>
-                    </>
-                  )}
-                </div>
-              )}
             </div>
+
+            {refundDest ? (
+              <div className="p-3.5 bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl space-y-1.5 text-xs">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                  Refund Destination (provided by customer)
+                </div>
+                {refundDest.method === 'bank' ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Account Holder:</span>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
+                        {refundDest.holderName || '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Account Number:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                        {refundDest.accountNumber}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">IFSC:</span>
+                      <span className="font-mono text-slate-600 dark:text-slate-300">
+                        {refundDest.ifsc || '—'}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">UPI ID:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                        {refundDest.upiId}
+                      </span>
+                    </div>
+                    {refundDest.holderName && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Holder:</span>
+                        <span className="font-medium text-slate-900 dark:text-slate-100">
+                          {refundDest.holderName}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className="text-[11px] text-slate-500 pt-1 border-t border-blue-100 dark:border-blue-900">
+                  Transfer the refund to this account, then paste the transfer reference below.
+                </div>
+              </div>
+            ) : selectedOrderForRefund.provider === 'cod' ? (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-lg text-xs">
+                No refund destination on file — contact the customer for their UPI / bank details before processing this COD payout.
+              </div>
+            ) : null}
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -1094,13 +1127,19 @@ export const FinancePage = () => {
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Bank / Gateway Refund Transaction ID
+                {selectedOrderForRefund.provider === 'cod'
+                  ? 'UPI / Bank Transfer Reference (from your payment app)'
+                  : 'Bank / Gateway Refund Transaction ID'}
               </label>
               <input
                 type="text"
                 value={refundTxnId}
                 onChange={(e) => setRefundTxnId(e.target.value)}
-                placeholder="e.g. rzp_ref_98124018"
+                placeholder={
+                  selectedOrderForRefund.provider === 'cod'
+                    ? 'e.g. 412309871234 (UPI transfer reference)'
+                    : 'e.g. rzp_ref_98124018'
+                }
                 className="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500"
                 required
               />
@@ -1198,12 +1237,6 @@ export const FinancePage = () => {
                   {formatCurrency((selectedPaymentDetail.tax || 0) + (selectedPaymentDetail.shippingFee || 0))}
                 </span>
               </div>
-              {selectedPaymentDetail.handlingFee > 0 && (
-                <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                  <span>Non-refundable Handling Fee:</span>
-                  <span className="font-mono">{formatCurrency(selectedPaymentDetail.handlingFee)}</span>
-                </div>
-              )}
               <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-slate-100 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <span>Total Net Collected:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400">
@@ -1223,11 +1256,6 @@ export const FinancePage = () => {
                 <div className="text-slate-600 dark:text-slate-300">
                   Amount: <strong className="font-mono">{formatCurrency(selectedPaymentDetail.refundInfo.refundAmount)}</strong>
                 </div>
-                {selectedPaymentDetail.handlingFee > 0 && (
-                  <div className="text-slate-600 dark:text-slate-300">
-                    Handling fee retained: <strong className="font-mono">-{formatCurrency(selectedPaymentDetail.handlingFee)}</strong>
-                  </div>
-                )}
                 <div className="text-slate-500 text-[11px]">
                   Reason: {selectedPaymentDetail.refundInfo.reason}
                 </div>

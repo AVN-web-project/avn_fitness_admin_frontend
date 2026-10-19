@@ -254,6 +254,9 @@ export const StaffPage = () => {
               placeholder="Minimum 6 characters"
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              These credentials are emailed to the staff member, with a link to change the password.
+            </p>
           </div>
 
           <div>

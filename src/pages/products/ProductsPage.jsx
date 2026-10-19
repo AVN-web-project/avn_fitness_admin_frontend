@@ -42,12 +42,20 @@ export const getProductThumbnailUrl = (product) => {
   return '/placeholder-product.png';
 };
 
+// Status filter for the grid. The API already accepts ?status=, so this is UI only.
+const PRODUCT_STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: PRODUCT_STATUS.ACTIVE, label: 'Active' },
+  { value: PRODUCT_STATUS.INACTIVE, label: 'Inactive' },
+];
+
 export const ProductsPage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const debouncedSearch = useDebounce(search, 300);
 
   // Success Toast
@@ -129,7 +137,10 @@ export const ProductsPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await productsApi.getProducts({ search: debouncedSearch });
+      const res = await productsApi.getProducts({
+        search: debouncedSearch,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+      });
       setProducts(res.products || res.items || []);
     } catch (err) {
       setError(err.message || 'Failed to fetch catalog products.');
@@ -144,7 +155,7 @@ export const ProductsPage = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [debouncedSearch]);
+  }, [debouncedSearch, statusFilter]);
 
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
@@ -155,7 +166,7 @@ export const ProductsPage = () => {
       variants: [
         {
           ...defaultVariant,
-          sku: `AVN-PROD-${Date.now().toString().slice(-4)}`,
+          sku: '',
         },
       ],
       images: [
@@ -186,7 +197,7 @@ export const ProductsPage = () => {
         : [
             {
               ...defaultVariant,
-              sku: `${product.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase()}-STD`,
+              sku: v.sku || '',
               price: product.pricing?.basePrice || product.price || 499,
             },
           ];
@@ -260,8 +271,6 @@ export const ProductsPage = () => {
   // ----------------------------------------------------
   const handleAddVariant = () => {
     const nextIndex = formData.variants.length + 1;
-    const prefix = (formData.name || 'AVN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase();
-    const newSku = `${prefix}-${Date.now().toString().slice(-4)}-${nextIndex}`;
 
     setFormData({
       ...formData,
@@ -269,7 +278,7 @@ export const ProductsPage = () => {
         ...formData.variants,
         {
           ...defaultVariant,
-          sku: newSku,
+          sku: '',
           title: `Variant ${nextIndex}`,
           price: Number(formData.variants[0]?.price) || 499,
           compareAtPrice: Number(formData.variants[0]?.compareAtPrice) || 699,
@@ -328,25 +337,23 @@ export const ProductsPage = () => {
             file.name,
             file.name.replace(/\.[^/.]+$/, '')
           );
-          if (res?.data?.url) {
-            uploadedList.push({
-              url: res.data.url,
-              altText: res.data.altText || file.name.replace(/\.[^/.]+$/, ''),
-              isPrimary: formData.images.length === 0 && uploadedList.length === 0,
-            });
-          } else {
-            uploadedList.push({
-              url: base64Data,
-              altText: file.name.replace(/\.[^/.]+$/, ''),
-              isPrimary: formData.images.length === 0 && uploadedList.length === 0,
-            });
+          // productsApi already unwraps the response envelope, so the URL sits at
+          // res.url. Never fall back to the raw base64: a data URI in image.url
+          // bloats the product document and ships the whole image inside every
+          // storefront payload, instead of a short served path.
+          const uploadedUrl = res?.url || res?.data?.url;
+          if (!uploadedUrl) {
+            throw new Error('The upload endpoint did not return an image URL.');
           }
-        } catch {
           uploadedList.push({
-            url: base64Data,
-            altText: file.name.replace(/\.[^/.]+$/, ''),
+            url: uploadedUrl,
+            altText: res?.altText || file.name.replace(/\.[^/.]+$/, ''),
             isPrimary: formData.images.length === 0 && uploadedList.length === 0,
           });
+        } catch (err) {
+          setUploadError(
+            `Could not upload "${file.name}". ${err?.message || 'Please try again.'}`
+          );
         }
       }
 
@@ -384,6 +391,13 @@ export const ProductsPage = () => {
   };
 
   const handleUpdateImage = (index, field, value) => {
+    // A data: URI here would embed the entire image in the product document — and
+    // in every storefront payload. Image sources must be a served path or a real URL.
+    if (field === 'url' && /^data:/i.test(String(value || '').trim())) {
+      setUploadError("Paste a URL or an /uploads/... path — data URIs aren't accepted here.");
+      return;
+    }
+
     const updated = [...formData.images];
     if (field === 'isPrimary') {
       updated.forEach((img, i) => {
@@ -458,6 +472,12 @@ export const ProductsPage = () => {
         .filter((s) => s.key && s.key.trim() && s.value && s.value.trim())
         .map((s) => ({ key: s.key.trim(), value: s.value.trim() }));
 
+      // Safety net: never let a data: URI reach the database, even one saved
+      // before the field guard existed.
+      if (formData.images.some((img) => /^data:/i.test(String(img?.url || '').trim()))) {
+        throw new Error("Image sources must be a URL or an /uploads/... path — data URIs aren't accepted.");
+      }
+
       // Clean images
       const parsedImages = formData.images
         .filter((img) => img.url && img.url.trim())
@@ -477,11 +497,10 @@ export const ProductsPage = () => {
 
       // Format variants
       const parsedVariants = (formData.variants && formData.variants.length > 0 ? formData.variants : [defaultVariant]).map((v, idx) => {
+        // SKUs are the backend's responsibility — send the value through as typed.
         const skuVal = (v?.sku || '').trim().toUpperCase();
-        const fallbackPrefix = (formData.name || 'AVN').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() || 'AVN';
-        const generatedSku = `${fallbackPrefix}-${idx + 1}-${Date.now().toString().slice(-4)}`;
         return {
-          sku: skuVal || generatedSku,
+          sku: skuVal,
           title: v?.title ? v.title.trim() : `${v?.size || ''} ${v?.color || ''}`.trim() || 'Standard',
           size: v?.size ? v.size.trim() : 'Standard',
           color: v?.color ? v.color.trim() : 'Standard',
@@ -685,12 +704,30 @@ export const ProductsPage = () => {
         </div>
       )}
 
+      {/* Status filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {PRODUCT_STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setStatusFilter(f.value)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              statusFilter === f.value
+                ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/20'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center justify-between gap-4">
         <SearchInput
           value={search}
           onChange={setSearch}
           onClear={() => setSearch('')}
-          placeholder="Search products by title, SKU, or keywords..."
+          placeholder="Search products by title or keywords..."
           className="w-full sm:w-80"
         />
         <Button variant="secondary" size="sm" leftIcon={RefreshCw} onClick={fetchProducts}>

@@ -16,12 +16,25 @@ import { formatCurrency } from '../../utils/formatCurrency.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { ORDER_STATUS } from '../../utils/constants.js';
 
+// Fulfillment statuses worth filtering by. Returns/refunds live on the Finance page.
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: ORDER_STATUS.PENDING_PAYMENT, label: 'Pending Payment' },
+  { value: ORDER_STATUS.PAID_CONFIRMED, label: 'Paid & Confirmed' },
+  { value: ORDER_STATUS.PROCESSING, label: 'Processing' },
+  { value: ORDER_STATUS.SHIPPED, label: 'Shipped' },
+  { value: ORDER_STATUS.DELIVERED, label: 'Delivered' },
+  { value: ORDER_STATUS.RETURN_REQUESTED, label: 'Return Requested' },
+  { value: ORDER_STATUS.CANCELLED, label: 'Cancelled' },
+];
+
 export const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Dispatch Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -59,6 +72,7 @@ export const OrdersPage = () => {
         page: pagination.page,
         limit: pagination.limit,
         search: debouncedSearch,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
       });
 
       setOrders(res.orders || res.items || []);
@@ -74,7 +88,7 @@ export const OrdersPage = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [pagination.page, debouncedSearch]);
+  }, [pagination.page, debouncedSearch, statusFilter]);
 
   const handleOpenDispatch = (order) => {
     setSelectedOrder(order);
@@ -307,6 +321,27 @@ export const OrdersPage = () => {
         subtitle="Manage order fulfillment, shipments, cancellations, and returns."
       />
 
+      {/* Status filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => {
+              setStatusFilter(f.value);
+              pagination.resetPage();
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              statusFilter === f.value
+                ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/20'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center justify-between gap-4">
         <SearchInput
           value={search}
@@ -326,7 +361,7 @@ export const OrdersPage = () => {
           isLoading={loading}
           error={error}
           onRetry={fetchOrders}
-          emptyTitle="No orders placed yet"
+          emptyTitle={statusFilter === 'all' ? 'No orders placed yet' : 'No orders match this filter'}
         />
 
         {!loading && !error && orders.length > 0 && (

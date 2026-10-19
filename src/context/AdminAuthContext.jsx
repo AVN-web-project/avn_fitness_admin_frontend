@@ -74,6 +74,19 @@ export const AdminAuthProvider = ({ children }) => {
     }
   };
 
+  const forgotPassword = async (email) => authApi.forgotPassword(email);
+
+  const resetPassword = async (email, token, password) => authApi.resetPassword(email, token, password);
+
+  const changePassword = async (currentPassword, newPassword) => {
+    const data = await authApi.changePassword(currentPassword, newPassword);
+    if (data?.user) {
+      setUser(data.user);
+      localStorage.setItem('avn_admin_user', JSON.stringify(data.user));
+    }
+    return data;
+  };
+
   const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN;
 
   return (
@@ -85,6 +98,9 @@ export const AdminAuthProvider = ({ children }) => {
         isSuperAdmin,
         login,
         logout,
+        forgotPassword,
+        resetPassword,
+        changePassword,
         refreshProfile: initAuth,
       }}
     >

@@ -94,7 +94,10 @@ export const InventoryPage = () => {
         inventoryList.filter((i) => i.productStatus === 'inactive' || i.isProductActive === false).length;
 
       setMetaCounts({
-        total: res.total || inventoryList.length,
+        // res.total is the FILTERED length; res.totalSkus is the global count.
+        // The stat tiles and chip labels must show the global figure, otherwise
+        // picking a filter makes "total SKUs tracked" shrink to the filtered count.
+        total: res.totalSkus || res.total || inventoryList.length,
         lowStock: lowCount,
         outOfStock: outCount,
         inactive: inactCount,

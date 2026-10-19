@@ -5,6 +5,7 @@ import PermissionRoute from './PermissionRoute.jsx';
 import AdminLayout from '../components/layout/AdminLayout.jsx';
 
 import LoginPage from '../pages/auth/LoginPage.jsx';
+import ResetPasswordPage from '../pages/auth/ResetPasswordPage.jsx';
 import DashboardPage from '../pages/dashboard/DashboardPage.jsx';
 import ProductsPage from '../pages/products/ProductsPage.jsx';
 import InventoryPage from '../pages/inventory/InventoryPage.jsx';
@@ -23,8 +24,9 @@ import { PERMISSIONS } from '../permissions/permissions.js';
 export const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Route */}
+      {/* Public Routes */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Protected Management Shell */}
       <Route

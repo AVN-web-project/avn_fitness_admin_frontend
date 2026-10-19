@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, UserX, UserCheck } from 'lucide-react';
+import { RefreshCw, UserX, UserCheck, Eye } from 'lucide-react';
 import { customersApi } from '../../services/customersApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
@@ -11,6 +11,7 @@ import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { usePagination } from '../../hooks/usePagination.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatDate } from '../../utils/formatDate.js';
+import { CustomerDetailsDrawer } from '../../components/customers/CustomerDetailsDrawer.jsx';
 
 export const CustomersPage = () => {
   const [customers, setCustomers] = useState([]);
@@ -23,6 +24,11 @@ export const CustomersPage = () => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+
+  // Detail Drawer State
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   const pagination = usePagination(1, 20);
 
@@ -66,6 +72,22 @@ export const CustomersPage = () => {
     }
   };
 
+  const handleViewCustomer = async (row) => {
+    setSelectedCustomer(row);
+    setDetail(null);
+    setIsDetailOpen(true);
+    setIsDetailLoading(true);
+    try {
+      const res = await customersApi.getCustomerDetail(row._id);
+      setDetail(res);
+    } catch (err) {
+      alert(err.message || 'Failed to load customer details.');
+      setIsDetailOpen(false);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
   const columns = [
     {
       header: 'Customer Name',
@@ -102,17 +124,28 @@ export const CustomersPage = () => {
       key: 'actions',
       align: 'right',
       render: (row) => (
-        <Button
-          variant={row.isActive !== false ? 'danger' : 'success'}
-          size="sm"
-          className="text-xs py-1 px-2.5"
-          onClick={() => {
-            setSelectedCustomer(row);
-            setIsToggleModalOpen(true);
-          }}
-        >
-          {row.isActive !== false ? 'Disable' : 'Enable'}
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="text-xs py-1 px-2.5"
+            leftIcon={Eye}
+            onClick={() => handleViewCustomer(row)}
+          >
+            View
+          </Button>
+          <Button
+            variant={row.isActive !== false ? 'danger' : 'success'}
+            size="sm"
+            className="text-xs py-1 px-2.5"
+            onClick={() => {
+              setSelectedCustomer(row);
+              setIsToggleModalOpen(true);
+            }}
+          >
+            {row.isActive !== false ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -175,6 +208,17 @@ export const CustomersPage = () => {
         confirmText={selectedCustomer?.isActive !== false ? 'Disable' : 'Enable'}
         variant={selectedCustomer?.isActive !== false ? 'danger' : 'primary'}
         isLoading={isToggling}
+      />
+
+      {/* Customer Detail Drawer */}
+      <CustomerDetailsDrawer
+        isOpen={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setDetail(null);
+        }}
+        detail={detail}
+        isLoading={isDetailLoading}
       />
     </div>
   );

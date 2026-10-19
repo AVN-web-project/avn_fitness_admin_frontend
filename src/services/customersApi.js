@@ -8,6 +8,11 @@ export const customersApi = {
     return res.data;
   },
 
+  getCustomerDetail: async (userId) => {
+    const res = await api.get(`/admin/users/${userId}`);
+    return res.data;
+  },
+
   toggleCustomerStatus: async (userId) => {
     const res = await api.patch(`/admin/users/${userId}/toggle-status`);
     return res.data;

@@ -1,12 +1,14 @@
-import React from 'react';
-import { Menu, Moon, Sun, LogOut, ShieldCheck, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { Menu, Moon, Sun, LogOut, ShieldCheck, User, KeyRound } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth.js';
 import { useTheme } from '../../context/ThemeContext.jsx';
 import { ROLE_LABELS } from '../../permissions/roles.js';
+import { ChangePasswordModal } from '../common/ChangePasswordModal.jsx';
 
 export const Topbar = ({ onOpenMobileMenu }) => {
   const { user, logout } = useAdminAuth();
   const { isDark, toggleTheme } = useTheme();
+  const [isPwModalOpen, setIsPwModalOpen] = useState(false);
 
   const roleDisplay = ROLE_LABELS[user?.role] || user?.role || 'Staff Member';
 
@@ -55,6 +57,15 @@ export const Topbar = ({ onOpenMobileMenu }) => {
           </div>
         </div>
 
+        {/* Change Password */}
+        <button
+          onClick={() => setIsPwModalOpen(true)}
+          title="Change your password"
+          className="p-2 rounded-lg text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
+        >
+          <KeyRound className="w-4 h-4" />
+        </button>
+
         {/* Logout Button */}
         <button
           onClick={logout}
@@ -64,6 +75,8 @@ export const Topbar = ({ onOpenMobileMenu }) => {
           <LogOut className="w-4 h-4" />
         </button>
       </div>
+
+      <ChangePasswordModal isOpen={isPwModalOpen} onClose={() => setIsPwModalOpen(false)} />
     </header>
   );
 };
