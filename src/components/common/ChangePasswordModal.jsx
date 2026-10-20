@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Lock, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Lock, X, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAdminAuth } from '../../hooks/useAdminAuth.js';
 import Button from '../../components/common/Button.jsx';
 
@@ -12,8 +12,11 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
   const { changePassword } = useAdminAuth();
 
   const [currentPassword, setCurrentPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -105,7 +108,7 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
             <div className="relative">
               <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
               <input
-                type="password"
+                type={showCurrent ? 'text' : 'password'}
                 required
                 autoFocus
                 value={currentPassword}
@@ -114,8 +117,16 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
                   if (error) setError('');
                 }}
                 placeholder="Enter your current password"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowCurrent(!showCurrent)}
+                aria-label={showCurrent ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              >
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -126,7 +137,7 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
             <div className="relative">
               <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
               <input
-                type="password"
+                type={showNew ? 'text' : 'password'}
                 required
                 value={newPassword}
                 onChange={(e) => {
@@ -134,8 +145,16 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
                   if (error) setError('');
                 }}
                 placeholder="At least 6 characters"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowNew(!showNew)}
+                aria-label={showNew ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              >
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -146,7 +165,7 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
             <div className="relative">
               <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-500" />
               <input
-                type="password"
+                type={showConfirm ? 'text' : 'password'}
                 required
                 value={confirmPassword}
                 onChange={(e) => {
@@ -154,8 +173,16 @@ export const ChangePasswordModal = ({ isOpen, onClose }) => {
                   if (error) setError('');
                 }}
                 placeholder="Re-enter the new password"
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(!showConfirm)}
+                aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              >
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

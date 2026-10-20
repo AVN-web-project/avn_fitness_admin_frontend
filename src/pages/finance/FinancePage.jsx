@@ -30,6 +30,10 @@ import StatusBadge from '../../components/common/StatusBadge.jsx';
 import Pagination from '../../components/common/Pagination.jsx';
 import { usePagination } from '../../hooks/usePagination.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
+import { useToast } from '../../hooks/useToast.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { PERMISSIONS } from '../../permissions/permissions.js';
@@ -41,7 +45,6 @@ export const FinancePage = () => {
   const [activeSection, setActiveSection] = useState('returns');
 
   // Success / Error Toast
-  const [toast, setToast] = useState({ type: '', message: '' });
 
   // ----------------------------------------------------
   // SECTION 1: Returns & Cancellations State
@@ -103,29 +106,46 @@ export const FinancePage = () => {
   const [selectedPaymentDetail, setSelectedPaymentDetail] = useState(null);
   const [isPaymentDetailModalOpen, setIsPaymentDetailModalOpen] = useState(false);
 
-  // Show temporary toast
+  const toast = useToast();
+
+  // Thin wrapper preserving the existing (type, message) signature, but reporting
+  // through the shared toast viewport. Always called after the API call resolves.
   const showToast = (type, message) => {
-    setToast({ type, message });
-    setTimeout(() => setToast({ type: '', message: '' }), 4500);
+    if (type === 'error') toast.error(message);
+    else if (type === 'info') toast.info(message);
+    else toast.success(message);
   };
 
   // ----------------------------------------------------
   // Fetch Functions
   // ----------------------------------------------------
-  const fetchReturnsAndCancellations = async () => {
+  const fetchReturnsAndCancellations = async ({ silent = false } = {}) => {
+    const params = {
+      page: returnPagination.page,
+      limit: returnPagination.limit,
+      filterType: returnFilter !== 'all' ? returnFilter : undefined,
+      search: debouncedReturnSearch || undefined,
+    };
+    const key = cacheKey('finance-returns', params);
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setReturnRequests(cached.requests || []);
+      if (cached.metrics) setReturnMetrics(cached.metrics);
+      if (cached.pagination) returnPagination.setTotal(cached.pagination.total || 0);
+      setReturnLoading(false);
+    }
+
     try {
-      setReturnLoading(true);
+      if (!silent) setReturnLoading(true);
       setReturnError(null);
-      const res = await financeApi.getReturnsAndCancellations({
-        page: returnPagination.page,
-        limit: returnPagination.limit,
-        filterType: returnFilter !== 'all' ? returnFilter : undefined,
-        search: debouncedReturnSearch || undefined,
-      });
+      const res = await financeApi.getReturnsAndCancellations(params);
 
       setReturnRequests(res.requests || []);
       if (res.metrics) setReturnMetrics(res.metrics);
       if (res.pagination) returnPagination.setTotal(res.pagination.total || 0);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setReturnError(err.message || 'Failed to load return & cancellation requests.');
     } finally {
@@ -133,27 +153,45 @@ export const FinancePage = () => {
     }
   };
 
-  const fetchPaymentsAndSales = async () => {
+  const fetchPaymentsAndSales = async ({ silent = false } = {}) => {
+    const params = {
+      page: paymentPagination.page,
+      limit: paymentPagination.limit,
+      status: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
+      provider: paymentProviderFilter !== 'all' ? paymentProviderFilter : undefined,
+      search: debouncedPaymentSearch || undefined,
+    };
+    const key = cacheKey('finance-payments', params);
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setPayments(cached.payments || []);
+      if (cached.stats) setSalesStats(cached.stats);
+      if (cached.pagination) paymentPagination.setTotal(cached.pagination.total || 0);
+      setPaymentLoading(false);
+    }
+
     try {
-      setPaymentLoading(true);
+      if (!silent) setPaymentLoading(true);
       setPaymentError(null);
-      const res = await financeApi.getPaymentsList({
-        page: paymentPagination.page,
-        limit: paymentPagination.limit,
-        status: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
-        provider: paymentProviderFilter !== 'all' ? paymentProviderFilter : undefined,
-        search: debouncedPaymentSearch || undefined,
-      });
+      const res = await financeApi.getPaymentsList(params);
 
       setPayments(res.payments || []);
       if (res.stats) setSalesStats(res.stats);
       if (res.pagination) paymentPagination.setTotal(res.pagination.total || 0);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setPaymentError(err.message || 'Failed to load payment transactions.');
     } finally {
       setPaymentLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchReturnsAndCancellations, { intervalMs: 60000 });
+  useAutoRefresh(fetchPaymentsAndSales, { intervalMs: 60000 });
 
   useEffect(() => {
     if (activeSection === 'returns') {
@@ -499,23 +537,6 @@ export const FinancePage = () => {
         subtitle="Two dedicated portals: Process return & cancellation refund workflows, and audit platform revenue with live processed payment transactions."
       />
 
-      {/* Global Toast */}
-      {toast.message && (
-        <div
-          className={`p-3.5 border rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in ${
-            toast.type === 'success'
-              ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
-              : 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'
-          }`}
-        >
-          {toast.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
-          )}
-          <span className="font-medium">{toast.message}</span>
-        </div>
-      )}
 
       {/* Domain Navigation Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">

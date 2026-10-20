@@ -29,6 +29,22 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
+      keyframes: {
+        // Toast entrance — slides in from the right with a slight scale-up.
+        'toast-in': {
+          '0%': { opacity: '0', transform: 'translateX(24px) scale(0.96)' },
+          '100%': { opacity: '1', transform: 'translateX(0) scale(1)' },
+        },
+        // Toast progress bar — shrinks to nothing over the toast's lifetime.
+        'toast-bar': {
+          '0%': { width: '100%' },
+          '100%': { width: '0%' },
+        },
+      },
+      animation: {
+        'toast-in': 'toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'toast-bar': 'toast-bar 4s linear forwards',
+      },
     },
   },
   plugins: [],

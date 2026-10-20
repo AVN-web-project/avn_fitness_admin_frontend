@@ -25,7 +25,12 @@ import DataTable from '../../components/common/DataTable.jsx';
 import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import SearchInput from '../../components/common/SearchInput.jsx';
+import { formatDate } from '../../utils/formatDate.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
+import { useToast } from '../../hooks/useToast.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { PRODUCT_STATUS } from '../../utils/constants.js';
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl.js';
@@ -59,7 +64,6 @@ export const ProductsPage = () => {
   const debouncedSearch = useDebounce(search, 300);
 
   // Success Toast
-  const [toastMessage, setToastMessage] = useState('');
 
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -119,10 +123,12 @@ export const ProductsPage = () => {
 
   const [formData, setFormData] = useState(initialFormState);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 4000);
-  };
+  const toast = useToast();
+
+  // Thin wrapper so every existing call site reports through the shared toast
+  // viewport. Only ever called AFTER the API call has resolved, so the message
+  // reflects what the server actually stored.
+  const showToast = (msg) => toast.success(msg);
 
   const fetchCategories = async () => {
     try {
@@ -133,21 +139,37 @@ export const ProductsPage = () => {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async ({ silent = false } = {}) => {
+    const params = {
+      search: debouncedSearch,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    };
+    const key = cacheKey('products', params);
+
+    // Paint the cached response immediately so switching domains never shows a spinner.
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setProducts(cached.products || cached.items || []);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
-      const res = await productsApi.getProducts({
-        search: debouncedSearch,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-      });
+      const res = await productsApi.getProducts(params);
       setProducts(res.products || res.items || []);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to fetch catalog products.');
     } finally {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchProducts, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchCategories();
@@ -296,7 +318,7 @@ export const ProductsPage = () => {
 
   const handleRemoveVariant = (index) => {
     if (formData.variants.length <= 1) {
-      alert('A product must contain at least one variant SKU.');
+      toast.error('A product must contain at least one variant SKU.');
       return;
     }
     const updated = formData.variants.filter((_, i) => i !== index);
@@ -411,7 +433,7 @@ export const ProductsPage = () => {
 
   const handleRemoveImage = (index) => {
     if (formData.images.length <= 1) {
-      alert('A product must have at least one image reference.');
+      toast.error('A product must have at least one image reference.');
       return;
     }
     const updated = formData.images.filter((_, i) => i !== index);
@@ -560,7 +582,7 @@ export const ProductsPage = () => {
       showToast(`Product status updated to ${newStatus === 'active' ? 'Active (Live onsite)' : 'Inactive (Hidden)'}.`);
       await fetchProducts();
     } catch (err) {
-      alert(err.message || 'Failed to update product status.');
+      toast.error(err.message || 'Failed to update product status.');
     }
   };
 
@@ -667,6 +689,15 @@ export const ProductsPage = () => {
       },
     },
     {
+      header: 'Added',
+      key: 'createdAt',
+      render: (row) => (
+        <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+          {formatDate(row.createdAt)}
+        </span>
+      ),
+    },
+    {
       header: 'Actions',
       key: 'actions',
       align: 'right',
@@ -696,13 +727,6 @@ export const ProductsPage = () => {
         }
       />
 
-      {/* Global Success Toast */}
-      {toastMessage && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-medium">{toastMessage}</span>
-        </div>
-      )}
 
       {/* Status filters */}
       <div className="flex flex-wrap items-center gap-2">

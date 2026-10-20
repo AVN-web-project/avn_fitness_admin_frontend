@@ -11,6 +11,10 @@ import Modal from '../../components/common/Modal.jsx';
 import OrderDetailsDrawer from '../../components/orders/OrderDetailsDrawer.jsx';
 import { usePermission } from '../../hooks/usePermission.js';
 import { usePagination } from '../../hooks/usePagination.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useToast } from '../../hooks/useToast.js';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { formatDate } from '../../utils/formatDate.js';
@@ -64,27 +68,46 @@ export const OrdersPage = () => {
   const { can } = usePermission();
   const canViewOrder = can('orders.view');
 
-  const fetchOrders = async () => {
+  const fetchOrders = async ({ silent = false } = {}) => {
+    const params = {
+      page: pagination.page,
+      limit: pagination.limit,
+      search: debouncedSearch,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    };
+    const key = cacheKey('orders', params);
+
+    // Paint the cached response immediately so switching domains never shows a spinner.
+    // The fetch below still runs and overwrites it, so a stale entry self-corrects.
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setOrders(cached.orders || cached.items || []);
+      if (cached.pagination) pagination.setTotal(cached.pagination.total || 0);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
-      const res = await ordersApi.getOrders({
-        page: pagination.page,
-        limit: pagination.limit,
-        search: debouncedSearch,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-      });
+      const res = await ordersApi.getOrders(params);
 
       setOrders(res.orders || res.items || []);
       if (res.pagination) {
         pagination.setTotal(res.pagination.total || 0);
       }
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to fetch customer orders.');
     } finally {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const toast = useToast();
+  const cache = useDataCache();
+  useAutoRefresh(fetchOrders, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchOrders();
@@ -102,6 +125,7 @@ export const OrdersPage = () => {
   const handleDispatchSubmit = async (e) => {
     e.preventDefault();
     if (!selectedOrder) return;
+    const orderNumber = selectedOrder.orderNumber;
     setActionLoading(true);
     setActionError('');
 
@@ -117,6 +141,7 @@ export const OrdersPage = () => {
       setIsDispatchModalOpen(false);
       setSelectedOrder(null);
       await fetchOrders();
+      toast.success(`Order ${orderNumber} dispatched.`);
     } catch (err) {
       setActionError(err.message || 'Failed to dispatch order.');
     } finally {
@@ -134,6 +159,7 @@ export const OrdersPage = () => {
   const handleStatusSubmit = async (e) => {
     e.preventDefault();
     if (!selectedOrder || !newStatus) return;
+    const orderNumber = selectedOrder.orderNumber;
     setActionLoading(true);
     setActionError('');
 
@@ -142,6 +168,7 @@ export const OrdersPage = () => {
       setIsStatusModalOpen(false);
       setSelectedOrder(null);
       await fetchOrders();
+      toast.success(`Order ${orderNumber} moved to ${newStatus}.`);
     } catch (err) {
       setActionError(err.message || 'Failed to update order status.');
     } finally {
@@ -160,6 +187,7 @@ export const OrdersPage = () => {
   const handleReturnReviewSubmit = async (e) => {
     e.preventDefault();
     if (!selectedOrder) return;
+    const orderNumber = selectedOrder.orderNumber;
     setActionLoading(true);
     setActionError('');
 
@@ -171,6 +199,9 @@ export const OrdersPage = () => {
       setIsReturnReviewModalOpen(false);
       setSelectedOrder(null);
       await fetchOrders();
+      toast.success(
+        `Return request ${returnReviewAction === 'approve' ? 'approved' : 'rejected'} for order ${orderNumber}.`
+      );
     } catch (err) {
       setActionError(err.message || 'Failed to review return request.');
     } finally {

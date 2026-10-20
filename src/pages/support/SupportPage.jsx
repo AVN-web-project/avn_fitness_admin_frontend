@@ -10,6 +10,10 @@ import Modal from '../../components/common/Modal.jsx';
 import { usePagination } from '../../hooks/usePagination.js';
 import { formatDate } from '../../utils/formatDate.js';
 import { SUPPORT_STATUS } from '../../utils/constants.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useToast } from '../../hooks/useToast.js';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 
 export const SupportPage = () => {
   const [tickets, setTickets] = useState([]);
@@ -35,25 +39,39 @@ export const SupportPage = () => {
 
   const pagination = usePagination(1, 20);
 
-  const fetchTickets = async () => {
+  const fetchTickets = async ({ silent = false } = {}) => {
+    const params = { page: pagination.page, limit: pagination.limit };
+    const key = cacheKey('support', params);
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setTickets(cached.tickets || cached.items || []);
+      if (cached.pagination) pagination.setTotal(cached.pagination.total || 0);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
-      const res = await supportApi.getSupportQueue({
-        page: pagination.page,
-        limit: pagination.limit,
-      });
+      const res = await supportApi.getSupportQueue(params);
 
       setTickets(res.tickets || res.items || []);
       if (res.pagination) {
         pagination.setTotal(res.pagination.total || 0);
       }
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to load support requests.');
     } finally {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const toast = useToast();
+  const cache = useDataCache();
+  useAutoRefresh(fetchTickets, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchTickets();
@@ -79,6 +97,7 @@ export const SupportPage = () => {
       setIsDetailModalOpen(false);
       setSelectedTicket(null);
       await fetchTickets();
+      toast.success('Reply sent and ticket status updated.');
     } catch (err) {
       setReplyError(err.message || 'Failed to reply to ticket.');
     } finally {
@@ -101,6 +120,7 @@ export const SupportPage = () => {
       setIsCreateModalOpen(false);
       setNewTicket({ orderNumber: '', subject: '', category: 'order', message: '' });
       await fetchTickets();
+      toast.success('Support ticket created.');
     } catch (err) {
       setCreateError(err.message || 'Failed to create support ticket.');
     } finally {

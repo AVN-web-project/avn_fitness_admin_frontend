@@ -29,6 +29,9 @@ import Button from '../../components/common/Button.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { ROLE_LABELS, ROLES } from '../../permissions/roles.js';
 import { PERMISSIONS } from '../../permissions/permissions.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 
 // All potential application quicklinks with their exact authorization requirements
 const ALL_SHORTCUTS = [
@@ -139,20 +142,31 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async ({ silent = false } = {}) => {
+    const key = 'dashboard';
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setData(cached);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
       // Attempt primary analytics load
       try {
         const analytics = await dashboardApi.getAdminAnalytics();
         setData(analytics);
-      } catch (adminErr) {
+        cache.write(key, analytics);
+        markUpdated();
+    } catch (adminErr) {
         // Fallback to operations dashboard
         try {
           const ops = await dashboardApi.getOperationsDashboard();
           setData(ops);
+          cache.write(key, ops);
         } catch (opsErr) {
           setData({ summary: {}, orderStatusDistribution: {} });
         }
@@ -177,6 +191,10 @@ export const DashboardPage = () => {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchDashboard, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchDashboard();

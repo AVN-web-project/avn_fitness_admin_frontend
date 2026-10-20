@@ -151,15 +151,6 @@ export const Sidebar = () => {
           );
         })}
       </div>
-
-      {/* Footer / System Info */}
-      <div className="p-4 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500 flex items-center justify-between">
-        <span>v1.0.0 (Phase 1)</span>
-        <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Backend Live
-        </span>
-      </div>
     </aside>
   );
 };

@@ -1,18 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Boxes,
-  Edit3,
-  RefreshCw,
-  AlertCircle,
-  Save,
-  AlertTriangle,
-  CheckCircle2,
-  PackageX,
-  Layers,
-  EyeOff,
-} from 'lucide-react';
+import { Boxes, Edit3, RefreshCw, AlertCircle, Save, AlertTriangle, PackageX, Layers, EyeOff } from 'lucide-react';
 import { inventoryApi } from '../../services/inventoryApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useToast } from '../../hooks/useToast.js';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
@@ -36,17 +29,23 @@ export const InventoryPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
-  const [successToast, setSuccessToast] = useState('');
 
-  const fetchInventory = async () => {
+  const fetchInventory = async ({ silent = false } = {}) => {
+    const params = {
+      search: debouncedSearch || undefined,
+      lowStock: filterType === 'lowStock' ? true : undefined,
+    };
+    const key = cacheKey('inventory', params);
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      const list = Array.isArray(cached.items) ? cached.items : [];
+      if (list.length) { setItems(list); setLoading(false); }
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
-      const params = {
-        search: debouncedSearch || undefined,
-        lowStock: filterType === 'lowStock' ? true : undefined,
-      };
-
       const res = await inventoryApi.getInventoryList(params);
 
       // Handle items from backend directly or fallback
@@ -111,12 +110,19 @@ export const InventoryPage = () => {
       }
 
       setItems(inventoryList);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to fetch inventory from database.');
     } finally {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const toast = useToast();
+  const cache = useDataCache();
+  useAutoRefresh(fetchInventory, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchInventory();
@@ -143,8 +149,7 @@ export const InventoryPage = () => {
         price: newPrice,
       });
 
-      setSuccessToast(`Stock for ${selectedItem.sku} successfully updated to ${newStock} units.`);
-      setTimeout(() => setSuccessToast(''), 4000);
+      toast.success(`Stock for ${selectedItem.sku} updated to ${newStock} units.`);
 
       setIsModalOpen(false);
       setSelectedItem(null);
@@ -169,8 +174,7 @@ export const InventoryPage = () => {
 
       await inventoryApi.updateProductAvailability(sku, isAvailable);
 
-      setSuccessToast(`Product status for ${sku} updated to ${isAvailable ? 'Available' : 'Unavailable'}.`);
-      setTimeout(() => setSuccessToast(''), 4000);
+      toast.success(`Product status for ${sku} updated to ${isAvailable ? 'Available' : 'Unavailable'}.`);
     } catch (err) {
       setError(err.message || 'Failed to update product status.');
       await fetchInventory();
@@ -334,14 +338,6 @@ export const InventoryPage = () => {
         title="Inventory Management"
         subtitle="Live synchronization with MongoDB inventory_m collection and product catalog."
       />
-
-      {/* Success Toast */}
-      {successToast && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl text-sm flex items-center gap-2.5 shadow-sm animate-fade-in">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="font-medium">{successToast}</span>
-        </div>
-      )}
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

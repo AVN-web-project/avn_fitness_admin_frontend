@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Tag, MessageSquare, AlertCircle, RefreshCw, Check, X, Shield } from 'lucide-react';
 import { marketingApi } from '../../services/marketingApi.js';
+import { useToast } from '../../hooks/useToast.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import Button from '../../components/common/Button.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import { formatDate } from '../../utils/formatDate.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 
 export const MarketingPage = () => {
   const [activeTab, setActiveTab] = useState('coupons'); // 'coupons' | 'reviews'
@@ -35,12 +39,22 @@ export const MarketingPage = () => {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState(null);
 
-  const fetchCoupons = async () => {
+  const fetchCoupons = async ({ silent = false } = {}) => {
+    const key = 'coupons';
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setCoupons(cached.coupons || cached.items || []);
+      setCouponLoading(false);
+    }
+
     try {
-      setCouponLoading(true);
+      if (!silent) setCouponLoading(true);
       setCouponError(null);
       const res = await marketingApi.getCoupons();
       setCoupons(res.coupons || res.items || []);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setCouponError(err.message || 'Failed to load promotional coupons.');
     } finally {
@@ -48,18 +62,33 @@ export const MarketingPage = () => {
     }
   };
 
-  const fetchReviews = async () => {
+  const fetchReviews = async ({ silent = false } = {}) => {
+    const key = 'reviews';
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setReviews(cached.reviews || cached.items || []);
+      setReviewsLoading(false);
+    }
+
     try {
-      setReviewsLoading(true);
+      if (!silent) setReviewsLoading(true);
       setReviewsError(null);
       const res = await marketingApi.getReviewsForModeration();
       setReviews(res.reviews || res.items || []);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setReviewsError(err.message || 'Failed to load reviews for moderation.');
     } finally {
       setReviewsLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchCoupons, { intervalMs: 60000 });
+  useAutoRefresh(fetchReviews, { intervalMs: 60000 });
 
   useEffect(() => {
     if (activeTab === 'coupons') {
@@ -68,6 +97,8 @@ export const MarketingPage = () => {
       fetchReviews();
     }
   }, [activeTab]);
+
+  const toast = useToast();
 
   const handleCreateCoupon = async (e) => {
     e.preventDefault();
@@ -113,8 +144,9 @@ export const MarketingPage = () => {
     try {
       await marketingApi.toggleCouponStatus(couponId);
       await fetchCoupons();
+      toast.success('Coupon status updated.');
     } catch (err) {
-      alert(err.message || 'Failed to toggle coupon status.');
+      toast.error(err.message || 'Failed to toggle coupon status.');
     }
   };
 
@@ -122,8 +154,9 @@ export const MarketingPage = () => {
     try {
       await marketingApi.moderateReview(reviewId, status);
       await fetchReviews();
+      toast.success(`Review ${status}.`);
     } catch (err) {
-      alert(err.message || 'Failed to moderate review.');
+      toast.error(err.message || 'Failed to moderate review.');
     }
   };
 

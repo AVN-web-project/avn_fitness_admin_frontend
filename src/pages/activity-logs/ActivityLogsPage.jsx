@@ -10,6 +10,9 @@ import { usePermission } from '../../hooks/usePermission.js';
 import { useAdminAuth } from '../../hooks/useAdminAuth.js';
 import { ROLE_LABELS } from '../../permissions/roles.js';
 import { formatDate } from '../../utils/formatDate.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 
 export const ActivityLogsPage = () => {
   const { isSuperAdmin } = useAdminAuth();
@@ -21,15 +24,23 @@ export const ActivityLogsPage = () => {
 
   const pagination = usePagination(1, 20);
 
-  const fetchLogs = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const fetchLogs = async ({ silent = false } = {}) => {
+    const params = {
+      page: pagination.page,
+      limit: pagination.limit,
+    };
+    const key = cacheKey('activity-logs', params);
 
-      const params = {
-        page: pagination.page,
-        limit: pagination.limit,
-      };
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setLogs(cached.logs || cached.items || []);
+      if (cached.pagination) pagination.setTotal(cached.pagination.total || 0);
+      setLoading(false);
+    }
+
+    try {
+      if (!silent) setLoading(true);
+      setError(null);
 
       if (entityFilter === 'STAFF' || entityFilter === 'Staff') {
         params.domain = 'STAFF';
@@ -43,12 +54,18 @@ export const ActivityLogsPage = () => {
       if (res.pagination) {
         pagination.setTotal(res.pagination.total || 0);
       }
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to fetch activity logs.');
     } finally {
       setLoading(false);
     }
   };
+
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchLogs, { intervalMs: 60000 });
 
   useEffect(() => {
     fetchLogs();

@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { UserPlus, Shield, Power, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { staffApi } from '../../services/staffApi.js';
+import { useToast } from '../../hooks/useToast.js';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
+import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
+import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
@@ -36,12 +40,23 @@ export const StaffPage = () => {
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
-  const fetchStaff = async () => {
+  const fetchStaff = async ({ silent = false } = {}) => {
+    const params = { search: debouncedSearch };
+    const key = cacheKey('staff', params);
+
+    const cached = cache.read(key);
+    if (cached && !silent) {
+      setStaff(cached.staff || cached.users || []);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
-      const res = await staffApi.getStaffUsers({ search: debouncedSearch });
+      const res = await staffApi.getStaffUsers(params);
       setStaff(res.staff || res.users || []);
+      cache.write(key, res);
+      markUpdated();
     } catch (err) {
       setError(err.message || 'Failed to load staff accounts.');
     } finally {
@@ -49,9 +64,15 @@ export const StaffPage = () => {
     }
   };
 
+  const { markUpdated } = useAutoRefreshContext();
+  const cache = useDataCache();
+  useAutoRefresh(fetchStaff, { intervalMs: 60000 });
+
   useEffect(() => {
     fetchStaff();
   }, [debouncedSearch]);
+
+  const toast = useToast();
 
   const handleCreateStaff = async (e) => {
     e.preventDefault();
@@ -69,6 +90,7 @@ export const StaffPage = () => {
         phone: '',
       });
       await fetchStaff();
+      toast.success(`Staff account created for ${formData.email}.`);
     } catch (err) {
       setFormError(err.message || 'Failed to create staff account.');
     } finally {
@@ -84,8 +106,9 @@ export const StaffPage = () => {
       setIsToggleModalOpen(false);
       setSelectedStaff(null);
       await fetchStaff();
+      toast.success('Staff status updated.');
     } catch (err) {
-      alert(err.message || 'Failed to update staff status.');
+      toast.error(err.message || 'Failed to update staff status.');
     } finally {
       setIsToggling(false);
     }
@@ -254,9 +277,6 @@ export const StaffPage = () => {
               placeholder="Minimum 6 characters"
               className="w-full px-3.5 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              These credentials are emailed to the staff member, with a link to change the password.
-            </p>
           </div>
 
           <div>
