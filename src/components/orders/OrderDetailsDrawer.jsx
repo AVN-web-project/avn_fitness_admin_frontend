@@ -116,6 +116,8 @@ export const OrderDetailsDrawer = ({ isOpen, onClose, order }) => {
                   <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
                     <img
                       src={resolveMediaUrl(item.image)}
+                      loading="lazy"
+                      decoding="async"
                       alt={item.name}
                       className="w-full h-full object-cover"
                       onError={(e) => { e.currentTarget.src = '/placeholder-product.png'; }}

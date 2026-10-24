@@ -598,6 +598,8 @@ export const ProductsPage = () => {
               <img
                 src={thumbUrl}
                 alt={row.name}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   if (e.target.src !== '/placeholder-product.png') {
@@ -1233,6 +1235,8 @@ export const ProductsPage = () => {
                         <img
                           src={resolveMediaUrl(img.url)}
                           alt={img.altText || 'Preview'}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             e.target.src = '/placeholder-product.png';
