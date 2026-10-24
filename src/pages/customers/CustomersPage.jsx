@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, UserX, UserCheck } from 'lucide-react';
+import { RefreshCw, UserX, UserCheck, Eye } from 'lucide-react';
 import { customersApi } from '../../services/customersApi.js';
 import { useToast } from '../../hooks/useToast.js';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
@@ -12,6 +12,7 @@ import Pagination from '../../components/common/Pagination.jsx';
 import SearchInput from '../../components/common/SearchInput.jsx';
 import Button from '../../components/common/Button.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import CustomerDetailsDrawer from '../../components/customers/CustomerDetailsDrawer.jsx';
 import { usePagination } from '../../hooks/usePagination.js';
 import { useDebounce } from '../../hooks/useDebounce.js';
 import { formatDate } from '../../utils/formatDate.js';
@@ -27,6 +28,11 @@ export const CustomersPage = () => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isToggleModalOpen, setIsToggleModalOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+
+  // Details Drawer State
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [customerDetail, setCustomerDetail] = useState(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   const pagination = usePagination(1, 20);
 
@@ -90,6 +96,24 @@ export const CustomersPage = () => {
     }
   };
 
+  // Open the details drawer. The list row only carries the summary fields, so the
+  // full record (addresses, order count, spend) is fetched on demand.
+  const handleViewCustomer = async (row) => {
+    setSelectedCustomer(row);
+    setCustomerDetail(null);
+    setIsDrawerOpen(true);
+    setIsDetailLoading(true);
+    try {
+      const res = await customersApi.getCustomerDetail(row._id);
+      setCustomerDetail(res?.user || res);
+    } catch (err) {
+      toast.error(err.message || 'Failed to load customer details.');
+      setIsDrawerOpen(false);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
   const columns = [
     {
       header: 'Customer Name',
@@ -126,17 +150,28 @@ export const CustomersPage = () => {
       key: 'actions',
       align: 'right',
       render: (row) => (
-        <Button
-          variant={row.isActive !== false ? 'danger' : 'success'}
-          size="sm"
-          className="text-xs py-1 px-2.5"
-          onClick={() => {
-            setSelectedCustomer(row);
-            setIsToggleModalOpen(true);
-          }}
-        >
-          {row.isActive !== false ? 'Disable' : 'Enable'}
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="text-xs py-1 px-2.5"
+            leftIcon={Eye}
+            onClick={() => handleViewCustomer(row)}
+          >
+            View
+          </Button>
+          <Button
+            variant={row.isActive !== false ? 'danger' : 'success'}
+            size="sm"
+            className="text-xs py-1 px-2.5"
+            onClick={() => {
+              setSelectedCustomer(row);
+              setIsToggleModalOpen(true);
+            }}
+          >
+            {row.isActive !== false ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -199,6 +234,17 @@ export const CustomersPage = () => {
         confirmText={selectedCustomer?.isActive !== false ? 'Disable' : 'Enable'}
         variant={selectedCustomer?.isActive !== false ? 'danger' : 'primary'}
         isLoading={isToggling}
+      />
+
+      {/* Customer Details */}
+      <CustomerDetailsDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setCustomerDetail(null);
+        }}
+        detail={customerDetail}
+        isLoading={isDetailLoading}
       />
     </div>
   );
