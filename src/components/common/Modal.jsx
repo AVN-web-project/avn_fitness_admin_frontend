@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export const Modal = ({
@@ -20,8 +21,15 @@ export const Modal = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+  // Portalled to document.body. Rendered inline, the overlay sat inside <main>'s ancestor
+  // stacking contexts, where the sticky Topbar's backdrop-filter (backdrop-blur-md) painted
+  // above it — so the header stayed bright while everything else dimmed. A portal lifts the
+  // overlay out of every ancestor context. z-[100] matches ChangePasswordModal and the two
+  // drawers, which now share document.body as a stacking context.
+  // backdrop-blur-sm, not backdrop-blur-xs: the project is on Tailwind v3.4, which has no
+  // 'xs' step, so that class generated nothing and the blur never applied.
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
         className={`w-full ${maxWidth} bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]`}
         role="dialog"
@@ -38,7 +46,8 @@ export const Modal = ({
         </div>
         <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

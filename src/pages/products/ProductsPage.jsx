@@ -94,6 +94,8 @@ export const ProductsPage = () => {
     url: '',
     altText: '',
     isPrimary: true,
+    // Empty = show for every variant ("All Variants" in the Media tab).
+    variantSkus: [],
   };
 
   const defaultSpec = {
@@ -196,6 +198,7 @@ export const ProductsPage = () => {
           url: '/placeholder-product.png',
           altText: 'Product thumbnail',
           isPrimary: true,
+          variantSkus: [],
         },
       ],
     });
@@ -230,6 +233,9 @@ export const ProductsPage = () => {
             url: img.url || '',
             altText: img.altText || product.name,
             isPrimary: img.isPrimary || idx === 0,
+            // Preserve the image→variant scope. Dropping it here would silently clear every
+            // mapping the next time the product is opened and saved.
+            variantSkus: Array.isArray(img.variantSkus) ? img.variantSkus : [],
           }))
         : [
             {
@@ -371,6 +377,8 @@ export const ProductsPage = () => {
             url: uploadedUrl,
             altText: res?.altText || file.name.replace(/\.[^/.]+$/, ''),
             isPrimary: formData.images.length === 0 && uploadedList.length === 0,
+            // New uploads default to "All Variants"; the Media tab can narrow them.
+            variantSkus: [],
           });
         } catch (err) {
           setUploadError(
@@ -1247,7 +1255,7 @@ export const ProductsPage = () => {
                       )}
                     </div>
 
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <div>
                         <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
                           Image File Source
@@ -1272,6 +1280,51 @@ export const ProductsPage = () => {
                           placeholder="e.g. Front angle view"
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
+                          Show For Variant
+                        </label>
+                        <select
+                          value={
+                            (() => {
+                              const sku = String((img.variantSkus || [])[0] || '').toUpperCase();
+                              if (!sku) return 'ALL';
+                              const exists = formData.variants.some(
+                                (v) => String(v.sku || '').trim().toUpperCase() === sku
+                              );
+                              return exists ? sku : 'ALL';
+                            })()
+                          }
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            handleUpdateImage(idx, 'variantSkus', next === 'ALL' ? [] : [next]);
+                          }}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                        >
+                          <option value="ALL">All Variants</option>
+                          {formData.variants
+                            .filter((v) => String(v.sku || '').trim())
+                            .map((v) => {
+                              const sku = String(v.sku).trim().toUpperCase();
+                              const parts = [v.title, v.size, v.color].filter(
+                                (x) => x && x !== 'Standard'
+                              );
+                              const label = parts.length
+                                ? [...new Set(parts)].join(' · ')
+                                : sku;
+                              return (
+                                <option key={sku} value={sku}>
+                                  {label}
+                                </option>
+                              );
+                            })}
+                        </select>
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          {(img.variantSkus || []).length
+                            ? 'Shown only when this variant is selected'
+                            : 'Shown for every variant'}
+                        </p>
                       </div>
                     </div>
 
