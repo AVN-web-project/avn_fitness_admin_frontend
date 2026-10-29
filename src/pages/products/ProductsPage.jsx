@@ -119,10 +119,6 @@ export const ProductsPage = () => {
     careInstructions: '',
     variants: [defaultVariant],
     images: [defaultImage],
-    specifications: [
-      { key: 'Material', value: 'High Grade Heavy-Duty Compound' },
-      { key: 'Warranty', value: '1 Year Full Replacement Guarantee' },
-    ],
   };
 
   const [formData, setFormData] = useState(initialFormState);
@@ -292,22 +288,25 @@ export const ProductsPage = () => {
     const mappedVariants =
       product.variants && product.variants.length > 0
         ? product.variants.map((v) => ({
-            sku: v.sku || '',
-            title: v.title || 'Standard',
-            size: v.size || 'Standard',
-            color: v.color || 'Standard',
-            price: Number(v.price) || 0,
-            compareAtPrice: Number(v.compareAtPrice) || 0,
-            stockQuantity: Number(v.stockQuantity) || 0,
-            isActive: v.isActive !== false,
-          }))
+          sku: v.sku || '',
+          title: v.title || 'Standard',
+          size: v.size || 'Standard',
+          color: v.color || 'Standard',
+          specifications: Array.isArray(v.specifications)
+            ? v.specifications.map((x) => ({ key: x?.key || '', value: x?.value || '' }))
+            : [],
+          price: Number(v.price) || 0,
+          compareAtPrice: Number(v.compareAtPrice) || 0,
+          stockQuantity: Number(v.stockQuantity) || 0,
+          isActive: v.isActive !== false,
+        }))
         : [
-            {
-              ...defaultVariant,
-              sku: v.sku || '',
-              price: product.pricing?.basePrice || product.price || 499,
-            },
-          ];
+          {
+            ...defaultVariant,
+            sku: v.sku || '',
+            price: product.pricing?.basePrice || product.price || 499,
+          },
+        ];
 
     // The database stores variant _ids; this UI works in SKUs. Translate on load so the two
     // checkbox dropdowns keep showing SKUs, and the payload sends SKUs which the backend resolves
@@ -321,41 +320,31 @@ export const ProductsPage = () => {
     const mappedImages = ensureOnePrimaryPerVariant(
       product.images && product.images.length > 0
         ? product.images.map((img, idx) => ({
-            url: img.url || '',
-            altText: img.altText || product.name,
-            isPrimary: img.isPrimary || idx === 0,
-            // Preserve both mappings. Dropping either here would silently clear every assignment
-            // the next time the product is opened and saved.
-            // Prefer the id-keyed fields, falling back to legacy SKU arrays.
-            variantSkus: idsToSkus(img.variantIds).length
-              ? idsToSkus(img.variantIds)
-              : (Array.isArray(img.variantSkus) ? img.variantSkus : []),
-            primaryFor: idsToSkus(img.primaryForIds).length
-              ? idsToSkus(img.primaryForIds)
-              : (Array.isArray(img.primaryFor) ? img.primaryFor : []),
-          }))
+          url: img.url || '',
+          altText: img.altText || product.name,
+          isPrimary: img.isPrimary || idx === 0,
+          // Preserve both mappings. Dropping either here would silently clear every assignment
+          // the next time the product is opened and saved.
+          // Prefer the id-keyed fields, falling back to legacy SKU arrays.
+          variantSkus: idsToSkus(img.variantIds).length
+            ? idsToSkus(img.variantIds)
+            : (Array.isArray(img.variantSkus) ? img.variantSkus : []),
+          primaryFor: idsToSkus(img.primaryForIds).length
+            ? idsToSkus(img.primaryForIds)
+            : (Array.isArray(img.primaryFor) ? img.primaryFor : []),
+        }))
         : [
-            {
-              url: product.image || '/placeholder-product.png',
-              altText: product.name,
-              isPrimary: true,
-              variantSkus: [],
-              primaryFor: [],
-            },
-          ],
+          {
+            url: product.image || '/placeholder-product.png',
+            altText: product.name,
+            isPrimary: true,
+            variantSkus: [],
+            primaryFor: [],
+          },
+        ],
       mappedVariants
     );
 
-    const mappedSpecs =
-      product.specifications && product.specifications.length > 0
-        ? product.specifications.map((s) => ({
-            key: s.key || '',
-            value: s.value || '',
-          }))
-        : [
-            { key: 'Material', value: 'High Grade Heavy-Duty Compound' },
-            { key: 'Warranty', value: '1 Year Full Replacement Guarantee' },
-          ];
 
     setFormData({
       name: product.name || '',
@@ -371,7 +360,6 @@ export const ProductsPage = () => {
       careInstructions: product.careInstructions || '',
       variants: mappedVariants,
       images: mappedImages,
-      specifications: mappedSpecs,
     });
   };
 
@@ -580,22 +568,34 @@ export const ProductsPage = () => {
   // ----------------------------------------------------
   // Specifications Management Helpers
   // ----------------------------------------------------
-  const handleAddSpec = () => {
-    setFormData({
-      ...formData,
-      specifications: [...formData.specifications, { key: '', value: '' }],
+  // Specs belong to the variant: a 79in wrap and a 90in wrap have different dimensions, and one
+  // product-level list had to describe both. Care instructions stay on the product.
+  const handleAddVariantSpec = (variantIndex) => {
+    const variants = formData.variants.map((v, i) =>
+      i === variantIndex
+        ? { ...v, specifications: [...(v.specifications || []), { key: '', value: '' }] }
+        : v
+    );
+    setFormData({ ...formData, variants });
+  };
+
+  const handleUpdateVariantSpec = (variantIndex, specIndex, field, value) => {
+    const variants = formData.variants.map((v, i) => {
+      if (i !== variantIndex) return v;
+      const specs = [...(v.specifications || [])];
+      specs[specIndex] = { ...specs[specIndex], [field]: value };
+      return { ...v, specifications: specs };
     });
+    setFormData({ ...formData, variants });
   };
 
-  const handleUpdateSpec = (index, field, value) => {
-    const updated = [...formData.specifications];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData({ ...formData, specifications: updated });
-  };
-
-  const handleRemoveSpec = (index) => {
-    const updated = formData.specifications.filter((_, i) => i !== index);
-    setFormData({ ...formData, specifications: updated });
+  const handleRemoveVariantSpec = (variantIndex, specIndex) => {
+    const variants = formData.variants.map((v, i) =>
+      i === variantIndex
+        ? { ...v, specifications: (v.specifications || []).filter((_, si) => si !== specIndex) }
+        : v
+    );
+    setFormData({ ...formData, variants });
   };
 
   // ----------------------------------------------------
@@ -618,15 +618,11 @@ export const ProductsPage = () => {
       // Format tags array from comma-separated string
       const parsedTags = typeof formData.tags === 'string'
         ? formData.tags
-            .split(',')
-            .map((t) => t.trim().toLowerCase())
-            .filter(Boolean)
+          .split(',')
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean)
         : formData.tags;
 
-      // Filter valid specifications
-      const parsedSpecs = formData.specifications
-        .filter((s) => s.key && s.key.trim() && s.value && s.value.trim())
-        .map((s) => ({ key: s.key.trim(), value: s.value.trim() }));
 
       // Safety net: never let a data: URI reach the database, even one saved
       // before the field guard existed.
@@ -669,6 +665,9 @@ export const ProductsPage = () => {
           color: v?.color ? v.color.trim() : 'Standard',
           price: Number(v?.price) || 0,
           compareAtPrice: Number(v?.compareAtPrice) || 0,
+          specifications: (v?.specifications || [])
+            .filter((sp) => sp?.key?.trim() && sp?.value?.trim())
+            .map((sp) => ({ key: sp.key.trim(), value: sp.value.trim() })),
           stockQuantity: Number(v?.stockQuantity) || 0,
           packQuantity: Number(v?.packQuantity) || 1,
           isActive: v?.isActive !== false && formData.status === PRODUCT_STATUS.ACTIVE,
@@ -690,7 +689,6 @@ export const ProductsPage = () => {
         gender: formData.gender,
         tags: parsedTags,
         careInstructions: formData.careInstructions.trim(),
-        specifications: parsedSpecs,
         images: parsedImages,
         variants: parsedVariants,
         price: primaryPrice,
@@ -819,11 +817,10 @@ export const ProductsPage = () => {
           <select
             value={currentStatus}
             onChange={(e) => handleStatusChange(row._id, e.target.value)}
-            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer border transition-all ${
-              currentStatus === 'active'
+            className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer border transition-all ${currentStatus === 'active'
                 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-            }`}
+              }`}
           >
             <option value={PRODUCT_STATUS.ACTIVE}>Active (Onsite)</option>
             <option value={PRODUCT_STATUS.INACTIVE}>Inactive (Hidden)</option>
@@ -878,11 +875,10 @@ export const ProductsPage = () => {
             key={f.value}
             type="button"
             onClick={() => setStatusFilter(f.value)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-              statusFilter === f.value
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${statusFilter === f.value
                 ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-500/20'
                 : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
-            }`}
+              }`}
           >
             {f.label}
           </button>
@@ -937,614 +933,606 @@ export const ProductsPage = () => {
 
         {!isFetchingProduct && (
           <>
-        {/* Modal Tab Navigation */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 mb-5 gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('general')}
-            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
-              activeTab === 'general'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            1. General Info
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('variants')}
-            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
-              activeTab === 'variants'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Boxes className="w-3.5 h-3.5" />
-            2. Variants & SKUs ({formData.variants.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('images')}
-            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
-              activeTab === 'images'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-            3. Media ({formData.images.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('specs')}
-            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
-              activeTab === 'specs'
-                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            4. Specs & Care
-          </button>
-        </div>
-
-        <form onSubmit={handleSaveProduct} className="space-y-4">
-          {/* TAB 1: GENERAL INFO */}
-          {activeTab === 'general' && (
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Product Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. AVN Heavy Duty Knee Wrap"
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Category Reference *
-                  </label>
-                  <select
-                    required
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select category...</option>
-                    {categories.map((c) => (
-                      <option key={c._id || c.slug} value={c._id || c.slug}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Display Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={PRODUCT_STATUS.ACTIVE}>Active (Live Onsite)</option>
-                    <option value={PRODUCT_STATUS.INACTIVE}>Inactive (Hidden)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Age Group
-                  </label>
-                  <select
-                    value={formData.ageGroup}
-                    onChange={(e) => setFormData({ ...formData, ageGroup: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Ages</option>
-                    <option value="adults">Adults</option>
-                    <option value="kids">Kids</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Target Gender
-                  </label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="unisex">Unisex</option>
-                    <option value="men">Men</option>
-                    <option value="women">Women</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Marketing Tagline
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tagline}
-                    onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                    placeholder="e.g. Maximum joint protection for heavy squats and leg presses."
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Badge / Tag
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.badge}
-                    onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
-                    placeholder="e.g. BESTSELLER, NEW, PRO"
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                  Search & SEO Tags (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={formData.tags}
-                  onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                  placeholder="e.g. knee wrap, powerlifting, squats, gym accessories"
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                  Full Product Description *
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Engineered with heavy-duty elastic compound rubber and premium cotton wrap..."
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: VARIANTS & PRICING */}
-          {activeTab === 'variants' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                    Variant SKUs & Inventory Stock
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Each variant is synchronized directly to the database <code className="font-mono text-blue-600">inventory_m</code> collection.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={Plus}
-                  onClick={handleAddVariant}
-                  className="text-xs"
-                >
-                  Add Variant
-                </Button>
-              </div>
-
-              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                {formData.variants.map((v, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
-                        Variant #{idx + 1}
-                      </span>
-                      {formData.variants.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveVariant(idx)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          SKU Code *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={v.sku}
-                          onChange={(e) => handleUpdateVariant(idx, 'sku', e.target.value.toUpperCase())}
-                          placeholder="AVN-KW-79"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Title / Description
-                        </label>
-                        <input
-                          type="text"
-                          value={v.title}
-                          onChange={(e) => handleUpdateVariant(idx, 'title', e.target.value)}
-                          placeholder="e.g. Red / Standard 79"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Size
-                        </label>
-                        <input
-                          type="text"
-                          value={v.size}
-                          onChange={(e) => handleUpdateVariant(idx, 'size', e.target.value)}
-                          placeholder="e.g. M, L, 79 inch"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Color
-                        </label>
-                        <input
-                          type="text"
-                          value={v.color}
-                          onChange={(e) => handleUpdateVariant(idx, 'color', e.target.value)}
-                          placeholder="e.g. Crimson Red"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Selling Price (₹) *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          value={v.price}
-                          onChange={(e) => handleUpdateVariant(idx, 'price', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          MRP / Compare Price (₹)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={v.compareAtPrice}
-                          onChange={(e) => handleUpdateVariant(idx, 'compareAtPrice', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Stock Quantity (Units) *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          value={v.stockQuantity}
-                          onChange={(e) => handleUpdateVariant(idx, 'stockQuantity', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs font-bold text-emerald-600"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: IMAGES & MEDIA */}
-          {activeTab === 'images' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                    Product Image Files & Media
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Upload product photos directly from your computer (PNG, JPG, WEBP, SVG).
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="text-xs py-1 px-2.5"
-                    leftIcon={Plus}
-                    onClick={handleAddImage}
-                  >
-                    Custom URL
-                  </Button>
-                </div>
-              </div>
-
-              {/* Hidden File Input */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                multiple
-                accept="image/*"
-                className="hidden"
-              />
-
-              {/* Upload Dropzone */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-blue-300 dark:border-blue-900 hover:border-blue-500 dark:hover:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-6 text-center cursor-pointer transition-all group"
+            {/* Modal Tab Navigation */}
+            <div className="flex border-b border-slate-200 dark:border-slate-800 mb-5 gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('general')}
+                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${activeTab === 'general'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
               >
-                {isUploadingImage ? (
-                  <div className="flex flex-col items-center justify-center gap-2 py-2">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                      Uploading & Processing Image File(s)...
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 py-1">
-                    <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-                      <UploadCloud className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                        Click to browse or drag & drop image files
-                      </span>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Supports PNG, JPG, JPEG, WEBP, SVG (Select single or multiple photos)
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                <FileText className="w-3.5 h-3.5" />
+                1. General Info
+              </button>
 
-              {uploadError && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{uploadError}</span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('variants')}
+                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${activeTab === 'variants'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                <Boxes className="w-3.5 h-3.5" />
+                2. Variants & SKUs ({formData.variants.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('images')}
+                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${activeTab === 'images'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                3. Media ({formData.images.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('specs')}
+                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${activeTab === 'specs'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                4. Care & Maintenance
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="space-y-4">
+              {/* TAB 1: GENERAL INFO */}
+              {activeTab === 'general' && (
+                <div className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Product Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="e.g. AVN Heavy Duty Knee Wrap"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Category Reference *
+                      </label>
+                      <select
+                        required
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map((c) => (
+                          <option key={c._id || c.slug} value={c._id || c.slug}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Display Status
+                      </label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={PRODUCT_STATUS.ACTIVE}>Active (Live Onsite)</option>
+                        <option value={PRODUCT_STATUS.INACTIVE}>Inactive (Hidden)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Age Group
+                      </label>
+                      <select
+                        value={formData.ageGroup}
+                        onChange={(e) => setFormData({ ...formData, ageGroup: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="all">All Ages</option>
+                        <option value="adults">Adults</option>
+                        <option value="kids">Kids</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Target Gender
+                      </label>
+                      <select
+                        value={formData.gender}
+                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="unisex">Unisex</option>
+                        <option value="men">Men</option>
+                        <option value="women">Women</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Marketing Tagline
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.tagline}
+                        onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                        placeholder="e.g. Maximum joint protection for heavy squats and leg presses."
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                        Badge / Tag
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.badge}
+                        onChange={(e) => setFormData({ ...formData, badge: e.target.value })}
+                        placeholder="e.g. BESTSELLER, NEW, PRO"
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Search & SEO Tags (Comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.tags}
+                      onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                      placeholder="e.g. knee wrap, powerlifting, squats, gym accessories"
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                      Full Product Description *
+                    </label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Engineered with heavy-duty elastic compound rubber and premium cotton wrap..."
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               )}
 
-              {/* Uploaded Images List */}
-              <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Configured Product Photos ({formData.images.length})
-                </div>
-
-                {formData.images.map((img, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-3 rounded-xl border flex items-center gap-3.5 transition-all ${
-                      img.isPrimary
-                        ? 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 shadow-xs'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    {/* Thumbnail Preview */}
-                    <div className="w-14 h-14 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
-                      {img.url ? (
-                        <img
-                          src={resolveMediaUrl(img.url)}
-                          alt={img.altText || 'Preview'}
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.target.src = '/placeholder-product.png';
-                          }}
-                        />
-                      ) : (
-                        <ImageIcon className="w-6 h-6 text-slate-400" />
-                      )}
+              {/* TAB 2: VARIANTS & PRICING */}
+              {activeTab === 'variants' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Variant SKUs & Inventory Stock
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Each variant is synchronized directly to the database <code className="font-mono text-blue-600">inventory_m</code> collection.
+                      </p>
                     </div>
-
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
-                          Image File Source
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={img.url}
-                          onChange={(e) => handleUpdateImage(idx, 'url', e.target.value)}
-                          placeholder="Image Path or Upload URL"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
-                          Alt Description
-                        </label>
-                        <input
-                          type="text"
-                          value={img.altText}
-                          onChange={(e) => handleUpdateImage(idx, 'altText', e.target.value)}
-                          placeholder="e.g. Front angle view"
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <VariantCheckboxDropdown
-                          label="Show For Variant"
-                          options={variantOptions}
-                          selected={img.variantSkus || []}
-                          onToggle={(sku, checked) => toggleImageShown(idx, sku, checked)}
-                          emptyLabel="All Variants"
-                        />
-                        <VariantCheckboxDropdown
-                          label="Primary For Variant"
-                          options={variantOptions}
-                          selected={img.primaryFor || []}
-                          onToggle={(sku, checked) => toggleImagePrimary(idx, sku, checked)}
-                          emptyLabel="None"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateImage(idx, 'isPrimary', true)}
-                        className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${
-                          img.isPrimary
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-400'
-                        }`}
-                      >
-                        <Star className={`w-3.5 h-3.5 ${img.isPrimary ? 'fill-white' : ''}`} />
-                        <span>{img.isPrimary ? 'Primary' : 'Set Primary'}</span>
-                      </button>
-
-                      {formData.images.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(idx)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors p-1.5"
-                          title="Remove image"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: SPECS & CARE */}
-          {activeTab === 'specs' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                    Technical Specifications
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Add key-value pairs for technical specifications displayed on product cards.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={Plus}
-                  onClick={handleAddSpec}
-                  className="text-xs"
-                >
-                  Add Spec
-                </Button>
-              </div>
-
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {formData.specifications.map((spec, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={spec.key}
-                      onChange={(e) => handleUpdateSpec(idx, 'key', e.target.value)}
-                      placeholder="Spec Name (e.g. Max Load, Length)"
-                      className="w-1/3 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
-                    />
-                    <input
-                      type="text"
-                      value={spec.value}
-                      onChange={(e) => handleUpdateSpec(idx, 'value', e.target.value)}
-                      placeholder="Spec Value (e.g. Tested up to 450 kg)"
-                      className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                    />
-                    <button
+                    <Button
                       type="button"
-                      onClick={() => handleRemoveSpec(idx)}
-                      className="text-slate-400 hover:text-rose-600 transition-colors p-1.5"
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={Plus}
+                      onClick={handleAddVariant}
+                      className="text-xs"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      Add Variant
+                    </Button>
                   </div>
-                ))}
-              </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase text-xs mb-1">
-                  Care & Maintenance Instructions
-                </label>
-                <textarea
-                  rows={2}
-                  value={formData.careInstructions}
-                  onChange={(e) => setFormData({ ...formData, careInstructions: e.target.value })}
-                  placeholder="e.g. Hand wash in cold water with mild detergent. Air dry flat in shade."
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          )}
+                  <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+                    {formData.variants.map((v, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
+                            Variant #{idx + 1}
+                          </span>
+                          {formData.variants.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariant(idx)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
 
-          {/* Modal Footer */}
-          <div className="mt-6 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <span>* Required fields</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setIsModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
-                {editingProduct ? 'Save Changes' : 'Publish Product to Catalog'}
-              </Button>
-            </div>
-          </div>
-        </form>
+                        <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[11px] text-slate-500 font-medium">
+                              Specifications (this variant only)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleAddVariantSpec(idx)}
+                              className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" /> Add Spec
+                            </button>
+                          </div>
+
+                          {(v.specifications || []).length === 0 && (
+                            <p className="text-[11px] text-slate-400">
+                              No specs yet — these show on the PDP when this variant is selected.
+                            </p>
+                          )}
+
+                          {(v.specifications || []).map((spec, sIdx) => (
+                            <div key={sIdx} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={spec.key}
+                                onChange={(e) => handleUpdateVariantSpec(idx, sIdx, 'key', e.target.value)}
+                                placeholder="Spec Name (e.g. Length)"
+                                className="w-1/3 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold"
+                              />
+                              <input
+                                type="text"
+                                value={spec.value}
+                                onChange={(e) => handleUpdateVariantSpec(idx, sIdx, 'value', e.target.value)}
+                                placeholder="Spec Value (e.g. 79 in)"
+                                className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveVariantSpec(idx, sIdx)}
+                                className="text-slate-400 hover:text-rose-600 transition-colors p-1.5"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              SKU Code *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={v.sku}
+                              onChange={(e) => handleUpdateVariant(idx, 'sku', e.target.value.toUpperCase())}
+                              placeholder="AVN-KW-79"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              Title / Description
+                            </label>
+                            <input
+                              type="text"
+                              value={v.title}
+                              onChange={(e) => handleUpdateVariant(idx, 'title', e.target.value)}
+                              placeholder="e.g. Red / Standard 79"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              Size
+                            </label>
+                            <input
+                              type="text"
+                              value={v.size}
+                              onChange={(e) => handleUpdateVariant(idx, 'size', e.target.value)}
+                              placeholder="e.g. M, L, 79 inch"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              Color
+                            </label>
+                            <input
+                              type="text"
+                              value={v.color}
+                              onChange={(e) => handleUpdateVariant(idx, 'color', e.target.value)}
+                              placeholder="e.g. Crimson Red"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              Selling Price (₹) *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              min={0}
+                              value={v.price}
+                              onChange={(e) => handleUpdateVariant(idx, 'price', e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              MRP / Compare Price (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={v.compareAtPrice}
+                              onChange={(e) => handleUpdateVariant(idx, 'compareAtPrice', e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                              Stock Quantity (Units) *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              min={0}
+                              value={v.stockQuantity}
+                              onChange={(e) => handleUpdateVariant(idx, 'stockQuantity', e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs font-bold text-emerald-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: IMAGES & MEDIA */}
+              {activeTab === 'images' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Product Image Files & Media
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Upload product photos directly from your computer (PNG, JPG, WEBP, SVG).
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="text-xs py-1 px-2.5"
+                        leftIcon={Plus}
+                        onClick={handleAddImage}
+                      >
+                        Custom URL
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Hidden File Input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  {/* Upload Dropzone */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-blue-300 dark:border-blue-900 hover:border-blue-500 dark:hover:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-6 text-center cursor-pointer transition-all group"
+                  >
+                    {isUploadingImage ? (
+                      <div className="flex flex-col items-center justify-center gap-2 py-2">
+                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                          Uploading & Processing Image File(s)...
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 py-1">
+                        <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                          <UploadCloud className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            Click to browse or drag & drop image files
+                          </span>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Supports PNG, JPG, JPEG, WEBP, SVG (Select single or multiple photos)
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {uploadError && (
+                    <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
+
+                  {/* Uploaded Images List */}
+                  <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Configured Product Photos ({formData.images.length})
+                    </div>
+
+                    {formData.images.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-xl border flex items-center gap-3.5 transition-all ${img.isPrimary
+                            ? 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                          }`}
+                      >
+                        {/* Thumbnail Preview */}
+                        <div className="w-14 h-14 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                          {img.url ? (
+                            <img
+                              src={resolveMediaUrl(img.url)}
+                              alt={img.altText || 'Preview'}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.src = '/placeholder-product.png';
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-slate-400" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
+                              Image File Source
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={img.url}
+                              onChange={(e) => handleUpdateImage(idx, 'url', e.target.value)}
+                              placeholder="Image Path or Upload URL"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
+                              Alt Description
+                            </label>
+                            <input
+                              type="text"
+                              value={img.altText}
+                              onChange={(e) => handleUpdateImage(idx, 'altText', e.target.value)}
+                              placeholder="e.g. Front angle view"
+                              className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <VariantCheckboxDropdown
+                              label="Show For Variant"
+                              options={variantOptions}
+                              selected={img.variantSkus || []}
+                              onToggle={(sku, checked) => toggleImageShown(idx, sku, checked)}
+                              emptyLabel="All Variants"
+                            />
+                            <VariantCheckboxDropdown
+                              label="Primary For Variant"
+                              options={variantOptions}
+                              selected={img.primaryFor || []}
+                              onToggle={(sku, checked) => toggleImagePrimary(idx, sku, checked)}
+                              emptyLabel="None"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateImage(idx, 'isPrimary', true)}
+                            className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${img.isPrimary
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-400'
+                              }`}
+                          >
+                            <Star className={`w-3.5 h-3.5 ${img.isPrimary ? 'fill-white' : ''}`} />
+                            <span>{img.isPrimary ? 'Primary' : 'Set Primary'}</span>
+                          </button>
+
+                          {formData.images.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors p-1.5"
+                              title="Remove image"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: SPECS & CARE */}
+              {activeTab === 'specs' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase text-xs mb-1">
+                      Care & Maintenance Instructions
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.careInstructions}
+                      onChange={(e) => setFormData({ ...formData, careInstructions: e.target.value })}
+                      placeholder="e.g. Hand wash in cold water with mild detergent. Air dry flat in shade."
+                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="mt-6 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>* Required fields</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setIsModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" variant="primary" size="sm" isLoading={isSubmitting}>
+                    {editingProduct ? 'Save Changes' : 'Publish Product to Catalog'}
+                  </Button>
+                </div>
+              </div>
+            </form>
           </>
         )}
       </Modal>
