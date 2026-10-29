@@ -34,6 +34,7 @@ import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { PRODUCT_STATUS } from '../../utils/constants.js';
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl.js';
+import VariantCheckboxDropdown from '../../components/common/VariantCheckboxDropdown.jsx';
 
 export const getProductThumbnailUrl = (product) => {
   if (!product) return '/placeholder-product.png';
@@ -96,6 +97,7 @@ export const ProductsPage = () => {
     isPrimary: true,
     // Empty = show for every variant ("All Variants" in the Media tab).
     variantSkus: [],
+    primaryFor: [],
   };
 
   const defaultSpec = {
@@ -199,11 +201,91 @@ export const ProductsPage = () => {
           altText: 'Product thumbnail',
           isPrimary: true,
           variantSkus: [],
+          primaryFor: [],
         },
       ],
     });
     setFormError('');
     setIsModalOpen(true);
+  };
+
+  // --- Media tab: per-variant image scoping ---------------------------------------
+  const skuOf = (x) => String(x || '').trim().toUpperCase();
+
+  // SKU only. It is the key the image stores and the PDP matches on, so the friendly
+  // size/colour text alongside it only invited confusion when the two disagreed.
+  const variantOptions = (formData.variants || [])
+    .map((v) => ({ sku: skuOf(v?.sku), v }))
+    .filter(({ sku }) => sku)
+    .map(({ sku }) => ({ value: sku, label: sku }));
+
+  // "Show for" is the visibility list. Dropping a variant from it must also drop it as primary,
+  // otherwise an image could be the hero for a variant it is not allowed to appear under.
+  const toggleImageShown = (index, sku, checked) => {
+    const key = skuOf(sku);
+    const images = formData.images.map((img, i) => {
+      if (i !== index) return img;
+      const shown = new Set((img.variantSkus || []).map(skuOf));
+      const primary = new Set((img.primaryFor || []).map(skuOf));
+      if (checked) {
+        shown.add(key);
+      } else {
+        shown.delete(key);
+        primary.delete(key);
+      }
+      return { ...img, variantSkus: [...shown], primaryFor: [...primary] };
+    });
+    setFormData({ ...formData, images });
+  };
+
+  // "Primary for" is exclusive per variant: claiming a variant here removes it from every other
+  // image, and claiming it also makes this image visible for that variant.
+  const toggleImagePrimary = (index, sku, checked) => {
+    const key = skuOf(sku);
+    const images = formData.images.map((img, i) => {
+      const primary = new Set((img.primaryFor || []).map(skuOf));
+      const shown = new Set((img.variantSkus || []).map(skuOf));
+
+      if (i === index) {
+        if (checked) {
+          primary.add(key);
+          shown.add(key);
+        } else {
+          primary.delete(key);
+        }
+        return { ...img, primaryFor: [...primary], variantSkus: [...shown] };
+      }
+      if (checked && primary.has(key)) {
+        primary.delete(key);
+        return { ...img, primaryFor: [...primary] };
+      }
+      return img;
+    });
+    setFormData({ ...formData, images });
+  };
+
+  // Every variant must have exactly one primary. Unclaimed variants inherit the first image shown
+  // for them, falling back to the first shared image, so saving is never blocked by data that
+  // predates this rule.
+  const ensureOnePrimaryPerVariant = (images, variants) => {
+    const skus = (variants || []).map((v) => skuOf(v?.sku)).filter(Boolean);
+    const claimed = new Set();
+    (images || []).forEach((img) => (img.primaryFor || []).map(skuOf).forEach((x) => claimed.add(x)));
+
+    const missing = skus.filter((x) => !claimed.has(x));
+    if (missing.length === 0) return images;
+
+    const next = (images || []).map((img) => ({ ...img, primaryFor: [...(img.primaryFor || [])] }));
+    missing.forEach((sku) => {
+      const host =
+        next.find((img) => (img.variantSkus || []).map(skuOf).includes(sku)) ||
+        next.find((img) => (img.variantSkus || []).length === 0) ||
+        next[0];
+      if (host && !(host.primaryFor || []).map(skuOf).includes(sku)) {
+        host.primaryFor = [...(host.primaryFor || []), sku];
+      }
+    });
+    return next;
   };
 
   const populateFormFromProduct = (product) => {
@@ -227,23 +309,42 @@ export const ProductsPage = () => {
             },
           ];
 
-    const mappedImages =
+    // The database stores variant _ids; this UI works in SKUs. Translate on load so the two
+    // checkbox dropdowns keep showing SKUs, and the payload sends SKUs which the backend resolves
+    // back to ids against the same document.
+    const skuById = new Map(
+      (product.variants || []).map((v) => [String(v?._id || ''), String(v?.sku || '').trim().toUpperCase()])
+    );
+    const idsToSkus = (ids) =>
+      (Array.isArray(ids) ? ids.map((x) => skuById.get(String(x))).filter(Boolean) : []);
+
+    const mappedImages = ensureOnePrimaryPerVariant(
       product.images && product.images.length > 0
         ? product.images.map((img, idx) => ({
             url: img.url || '',
             altText: img.altText || product.name,
             isPrimary: img.isPrimary || idx === 0,
-            // Preserve the image→variant scope. Dropping it here would silently clear every
-            // mapping the next time the product is opened and saved.
-            variantSkus: Array.isArray(img.variantSkus) ? img.variantSkus : [],
+            // Preserve both mappings. Dropping either here would silently clear every assignment
+            // the next time the product is opened and saved.
+            // Prefer the id-keyed fields, falling back to legacy SKU arrays.
+            variantSkus: idsToSkus(img.variantIds).length
+              ? idsToSkus(img.variantIds)
+              : (Array.isArray(img.variantSkus) ? img.variantSkus : []),
+            primaryFor: idsToSkus(img.primaryForIds).length
+              ? idsToSkus(img.primaryForIds)
+              : (Array.isArray(img.primaryFor) ? img.primaryFor : []),
           }))
         : [
             {
               url: product.image || '/placeholder-product.png',
               altText: product.name,
               isPrimary: true,
+              variantSkus: [],
+              primaryFor: [],
             },
-          ];
+          ],
+      mappedVariants
+    );
 
     const mappedSpecs =
       product.specifications && product.specifications.length > 0
@@ -318,7 +419,31 @@ export const ProductsPage = () => {
 
   const handleUpdateVariant = (index, field, value) => {
     const updated = [...formData.variants];
+    const previousSku = skuOf(updated[index]?.sku);
     updated[index] = { ...updated[index], [field]: value };
+
+    // The SKU is the key the image mappings are stored under, so renaming a variant has to rewrite
+    // them. Without this the images keep pointing at the old string, which no longer matches any
+    // variant, and the pre-save hook drops the assignment entirely.
+    const nextSku = skuOf(value);
+    const renamed = field === 'sku' && previousSku && nextSku && previousSku !== nextSku;
+
+    if (renamed) {
+      const remap = (list) =>
+        (list || []).map((x) => (skuOf(x) === previousSku ? nextSku : skuOf(x)));
+
+      setFormData({
+        ...formData,
+        variants: updated,
+        images: formData.images.map((img) => ({
+          ...img,
+          variantSkus: remap(img.variantSkus),
+          primaryFor: remap(img.primaryFor),
+        })),
+      });
+      return;
+    }
+
     setFormData({ ...formData, variants: updated });
   };
 
@@ -379,6 +504,7 @@ export const ProductsPage = () => {
             isPrimary: formData.images.length === 0 && uploadedList.length === 0,
             // New uploads default to "All Variants"; the Media tab can narrow them.
             variantSkus: [],
+            primaryFor: [],
           });
         } catch (err) {
           setUploadError(
@@ -415,7 +541,7 @@ export const ProductsPage = () => {
       ...formData,
       images: [
         ...formData.images,
-        { url: '', altText: formData.name || 'Product Image', isPrimary: false },
+        { url: '', altText: formData.name || 'Product Image', isPrimary: false, variantSkus: [], primaryFor: [] },
       ],
     });
   };
@@ -509,12 +635,19 @@ export const ProductsPage = () => {
       }
 
       // Clean images
-      const parsedImages = formData.images
+      // Each variant must have exactly one primary image; fill any gap before saving.
+      const finalImages = ensureOnePrimaryPerVariant(formData.images, formData.variants);
+
+      const parsedImages = finalImages
         .filter((img) => img.url && img.url.trim())
         .map((img) => ({
           url: img.url.trim(),
           altText: img.altText ? img.altText.trim() : formData.name.trim(),
           isPrimary: !!img.isPrimary,
+          // Both mappings have to travel with the image. Omitting them here is what silently
+          // reset every variant assignment on save.
+          variantSkus: (img.variantSkus || []).map((x) => String(x).toUpperCase()),
+          primaryFor: (img.primaryFor || []).map((x) => String(x).toUpperCase()),
         }));
 
       if (parsedImages.length === 0) {
@@ -1281,50 +1414,21 @@ export const ProductsPage = () => {
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
-                          Show For Variant
-                        </label>
-                        <select
-                          value={
-                            (() => {
-                              const sku = String((img.variantSkus || [])[0] || '').toUpperCase();
-                              if (!sku) return 'ALL';
-                              const exists = formData.variants.some(
-                                (v) => String(v.sku || '').trim().toUpperCase() === sku
-                              );
-                              return exists ? sku : 'ALL';
-                            })()
-                          }
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            handleUpdateImage(idx, 'variantSkus', next === 'ALL' ? [] : [next]);
-                          }}
-                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-                        >
-                          <option value="ALL">All Variants</option>
-                          {formData.variants
-                            .filter((v) => String(v.sku || '').trim())
-                            .map((v) => {
-                              const sku = String(v.sku).trim().toUpperCase();
-                              const parts = [v.title, v.size, v.color].filter(
-                                (x) => x && x !== 'Standard'
-                              );
-                              const label = parts.length
-                                ? [...new Set(parts)].join(' · ')
-                                : sku;
-                              return (
-                                <option key={sku} value={sku}>
-                                  {label}
-                                </option>
-                              );
-                            })}
-                        </select>
-                        <p className="mt-0.5 text-[10px] text-slate-400">
-                          {(img.variantSkus || []).length
-                            ? 'Shown only when this variant is selected'
-                            : 'Shown for every variant'}
-                        </p>
+                      <div className="space-y-2">
+                        <VariantCheckboxDropdown
+                          label="Show For Variant"
+                          options={variantOptions}
+                          selected={img.variantSkus || []}
+                          onToggle={(sku, checked) => toggleImageShown(idx, sku, checked)}
+                          emptyLabel="All Variants"
+                        />
+                        <VariantCheckboxDropdown
+                          label="Primary For Variant"
+                          options={variantOptions}
+                          selected={img.primaryFor || []}
+                          onToggle={(sku, checked) => toggleImagePrimary(idx, sku, checked)}
+                          emptyLabel="None"
+                        />
                       </div>
                     </div>
 
