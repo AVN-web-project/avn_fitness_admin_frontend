@@ -19,6 +19,8 @@ import {
   Star,
   Package,
   ImageOff,
+  Info,
+  Ruler,
 } from 'lucide-react';
 import { productsApi } from '../../services/productsApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
@@ -56,6 +58,38 @@ const PRODUCT_STATUS_FILTERS = [
   { value: PRODUCT_STATUS.INACTIVE, label: 'Inactive' },
 ];
 
+const getPdpSizeChartRows = (category) => {
+  const categoryName = String(category || '').toUpperCase();
+
+  if (categoryName.includes('KNEE') || categoryName.includes('ELBOW')) {
+    return [
+      {
+        sizeVariant: 'Standard (79") / Medium',
+        dimensions: 'Knee: 79" | Elbow: 10"-12"',
+        recommendedUse: 'Daily heavy training & hyper-mobility',
+      },
+      {
+        sizeVariant: 'XL Heavy (90") / Large',
+        dimensions: 'Knee: 90" | Elbow: 12"-14"',
+        recommendedUse: 'Powerlifting competitions & maximum rebound',
+      },
+    ];
+  }
+
+  return [
+    {
+      sizeVariant: '18-Inch Competition',
+      dimensions: '45 cm (18 Inches)',
+      recommendedUse: 'IPF Legal Competition Grade',
+    },
+    {
+      sizeVariant: '24-Inch Heavy Duty',
+      dimensions: '60 cm (24 Inches)',
+      recommendedUse: 'Maximum wrist locking for 200kg+ Bench',
+    },
+  ];
+};
+
 export const ProductsPage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -71,6 +105,7 @@ export const ProductsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [activeTab, setActiveTab] = useState('general'); // 'general', 'variants', 'images', 'specs'
+  const [variantSearch, setVariantSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -80,8 +115,10 @@ export const ProductsPage = () => {
 
   // Edit modal fetch state
   const [isFetchingProduct, setIsFetchingProduct] = useState(false);
+  const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
 
   const defaultVariant = {
+    variantNumber: 1,
     sku: '',
     title: 'Standard',
     size: 'Standard',
@@ -184,6 +221,7 @@ export const ProductsPage = () => {
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
     setActiveTab('general');
+    setVariantSearch('');
     setFormData({
       ...initialFormState,
       category: categories[0]?._id || '',
@@ -209,6 +247,79 @@ export const ProductsPage = () => {
 
   // --- Media tab: per-variant image scoping ---------------------------------------
   const skuOf = (x) => String(x || '').trim().toUpperCase();
+
+  const skuToken = (value, fallback) =>
+    String(value || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 4) || fallback;
+
+  const categoryCodeForSku = (name) => {
+    const words = String(name || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!words.length) return 'GEN';
+    return words.length === 1
+      ? words[0].slice(0, 3)
+      : words.map((word) => word[0]).join('').slice(0, 3);
+  };
+
+  const sizeCodeForSku = (size) => {
+    const value = String(size || '').trim().toUpperCase();
+    if (!value || ['STANDARD', 'ONE SIZE', 'ONESIZE', 'OS', 'FREE', 'FREE SIZE'].includes(value)) {
+      return '';
+    }
+    const known = { SMALL: 'S', MEDIUM: 'M', LARGE: 'L', 'EXTRA LARGE': 'XL', XLARGE: 'XL' };
+    if (known[value]) return known[value];
+    const number = value.match(/\d+(?:\.\d+)?/);
+    if (number) return `${Math.round(Number(number[0]))}IN`;
+    return skuToken(value, '');
+  };
+
+  const colourCodeForSku = (color) => {
+    const value = String(color || '').trim().toUpperCase();
+    if (!value || value === 'STANDARD') return '';
+    const known = {
+      BLACK: 'BLK',
+      WHITE: 'WHT',
+      RED: 'RED',
+      CRIMSON: 'RED',
+      NAVY: 'NVY',
+      BLUE: 'BLU',
+      GREY: 'GRY',
+      GRAY: 'GRY',
+      GREEN: 'GRN',
+      NATURAL: 'NAT',
+      CANVAS: 'NAT',
+      BEIGE: 'BGE',
+      PINK: 'PNK',
+      PURPLE: 'PUR',
+    };
+    const match = Object.keys(known).find((word) => value.includes(word));
+    return match ? known[match] : skuToken(value, '');
+  };
+
+  const categoryNameForSku = () =>
+    categories.find((category) => String(category?._id) === String(formData.category))?.name
+      || (typeof editingProduct?.category === 'object' ? editingProduct.category.name : editingProduct?.category)
+      || '';
+
+  const skuPrefixForNewVariant = () => {
+    const existingSku = (formData.variants || [])
+      .filter((variant) => !variant.isNewVariant && skuOf(variant.sku))
+      .map((variant) => skuOf(variant.sku))[0];
+    if (existingSku) return existingSku.split('-').slice(0, 3).join('-');
+    return `AVN-${categoryCodeForSku(categoryNameForSku())}-${skuToken(formData.name, 'PROD')}`;
+  };
+
+  const autocompleteVariantSku = (variant) => {
+    const prefix = skuPrefixForNewVariant();
+    const parts = [prefix, colourCodeForSku(variant.color), sizeCodeForSku(variant.size)]
+      .filter(Boolean);
+    return parts.join('-');
+  };
 
   // SKU only. It is the key the image stores and the PDP matches on, so the friendly
   // size/colour text alongside it only invited confusion when the two disagreed.
@@ -262,34 +373,13 @@ export const ProductsPage = () => {
     setFormData({ ...formData, images });
   };
 
-  // Every variant must have exactly one primary. Unclaimed variants inherit the first image shown
-  // for them, falling back to the first shared image, so saving is never blocked by data that
-  // predates this rule.
-  const ensureOnePrimaryPerVariant = (images, variants) => {
-    const skus = (variants || []).map((v) => skuOf(v?.sku)).filter(Boolean);
-    const claimed = new Set();
-    (images || []).forEach((img) => (img.primaryFor || []).map(skuOf).forEach((x) => claimed.add(x)));
-
-    const missing = skus.filter((x) => !claimed.has(x));
-    if (missing.length === 0) return images;
-
-    const next = (images || []).map((img) => ({ ...img, primaryFor: [...(img.primaryFor || [])] }));
-    missing.forEach((sku) => {
-      const host =
-        next.find((img) => (img.variantSkus || []).map(skuOf).includes(sku)) ||
-        next.find((img) => (img.variantSkus || []).length === 0) ||
-        next[0];
-      if (host && !(host.primaryFor || []).map(skuOf).includes(sku)) {
-        host.primaryFor = [...(host.primaryFor || []), sku];
-      }
-    });
-    return next;
-  };
-
   const populateFormFromProduct = (product) => {
     const mappedVariants =
       product.variants && product.variants.length > 0
-        ? product.variants.map((v) => ({
+        ? product.variants.map((v, index) => ({
+            _id: v._id || '',
+            isNewVariant: false,
+            variantNumber: index + 1,
             sku: v.sku || '',
             title: v.title || 'Standard',
             size: v.size || 'Standard',
@@ -305,6 +395,9 @@ export const ProductsPage = () => {
         : [
             {
               ...defaultVariant,
+              _id: '',
+              isNewVariant: true,
+              variantNumber: 1,
               sku: v.sku || '',
               price: product.pricing?.basePrice || product.price || 499,
             },
@@ -319,12 +412,20 @@ export const ProductsPage = () => {
     const idsToSkus = (ids) =>
       (Array.isArray(ids) ? ids.map((x) => skuById.get(String(x))).filter(Boolean) : []);
 
-    const mappedImages = ensureOnePrimaryPerVariant(
-      product.images && product.images.length > 0
-        ? product.images.map((img, idx) => ({
+    const sourceImages = product.images && product.images.length > 0
+      ? product.images
+      : [{
+          url: product.image || '/placeholder-product.png',
+          altText: product.name,
+          isPrimary: true,
+          variantSkus: [],
+          primaryFor: [],
+        }];
+    const firstPrimaryIndex = sourceImages.findIndex((img) => img?.isPrimary === true || img?.isPrimary === 'true');
+    const mappedImages = sourceImages.map((img, idx) => ({
             url: img.url || '',
             altText: img.altText || product.name,
-            isPrimary: img.isPrimary || idx === 0,
+            isPrimary: firstPrimaryIndex >= 0 ? idx === firstPrimaryIndex : idx === 0,
             // Preserve both mappings. Dropping either here would silently clear every assignment
             // the next time the product is opened and saved.
             // Prefer the id-keyed fields, falling back to legacy SKU arrays.
@@ -332,20 +433,9 @@ export const ProductsPage = () => {
               ? idsToSkus(img.variantIds)
               : (Array.isArray(img.variantSkus) ? img.variantSkus : []),
             primaryFor: idsToSkus(img.primaryForIds).length
-              ? idsToSkus(img.primaryForIds)
-              : (Array.isArray(img.primaryFor) ? img.primaryFor : []),
-          }))
-        : [
-            {
-              url: product.image || '/placeholder-product.png',
-              altText: product.name,
-              isPrimary: true,
-              variantSkus: [],
-              primaryFor: [],
-            },
-          ],
-      mappedVariants
-    );
+            ? idsToSkus(img.primaryForIds)
+            : (Array.isArray(img.primaryFor) ? img.primaryFor : []),
+          }));
 
 
     setFormData({
@@ -368,6 +458,7 @@ export const ProductsPage = () => {
   const handleOpenEditModal = async (product) => {
     setEditingProduct(product);
     setActiveTab('variants'); // Open directly on Variants tab so they are immediately visible
+    setVariantSearch('');
     setFormError('');
     setIsFetchingProduct(true);
     setIsModalOpen(true);
@@ -389,20 +480,29 @@ export const ProductsPage = () => {
   // Variant Management Helpers
   // ----------------------------------------------------
   const handleAddVariant = () => {
-    const nextIndex = formData.variants.length + 1;
+    const nextVariantNumber = formData.variants.reduce(
+      (highest, variant) => Math.max(highest, Number(variant.variantNumber) || 0),
+      0
+    ) + 1;
 
     setFormData({
       ...formData,
       variants: [
-        ...formData.variants,
         {
           ...defaultVariant,
-          sku: '',
-          title: `Variant ${nextIndex}`,
+          sku: autocompleteVariantSku({
+            ...defaultVariant,
+            variantNumber: nextVariantNumber,
+          }),
+          isNewVariant: true,
+          skuAutoGenerated: true,
+          variantNumber: nextVariantNumber,
+          title: `Variant ${nextVariantNumber}`,
           price: Number(formData.variants[0]?.price) || 499,
           compareAtPrice: Number(formData.variants[0]?.compareAtPrice) || 699,
           stockQuantity: 25,
         },
+        ...formData.variants,
       ],
     });
   };
@@ -411,6 +511,16 @@ export const ProductsPage = () => {
     const updated = [...formData.variants];
     const previousSku = skuOf(updated[index]?.sku);
     updated[index] = { ...updated[index], [field]: value };
+
+    if (field === 'sku') {
+      updated[index].skuAutoGenerated = false;
+    } else if (
+      updated[index].isNewVariant
+      && updated[index].skuAutoGenerated
+      && ['size', 'color', 'variantNumber'].includes(field)
+    ) {
+      updated[index].sku = autocompleteVariantSku(updated[index]);
+    }
 
     // The SKU is the key the image mappings are stored under, so renaming a variant has to rewrite
     // them. Without this the images keep pointing at the old string, which no longer matches any
@@ -601,6 +711,26 @@ export const ProductsPage = () => {
     return global?.url ? resolveMediaUrl(global.url) : '';
   };
 
+  const getVariantImages = (variant) => {
+    const sku = skuOf(variant?.sku);
+    const primaryImage = getVariantImage(variant);
+
+    return (Array.isArray(formData.images) ? formData.images : [])
+      .filter((image) => {
+        if (!image?.url) return false;
+        const mappedSkus = Array.isArray(image.variantSkus)
+          ? image.variantSkus.map(skuOf).filter(Boolean)
+          : [];
+
+        return mappedSkus.length === 0 || (sku && mappedSkus.includes(sku));
+      })
+      .map((image) => ({
+        ...image,
+        url: resolveMediaUrl(image.url),
+      }))
+      .filter((image) => image.url !== primaryImage);
+  };
+
   // ----------------------------------------------------
   // Specifications Management Helpers
   // ----------------------------------------------------
@@ -651,6 +781,33 @@ export const ProductsPage = () => {
         throw new Error('At least one variant SKU must be configured.');
       }
 
+      const seenSkus = new Set();
+      const seenCombinations = new Set();
+      formData.variants.forEach((variant, index) => {
+        const sku = skuOf(variant?.sku);
+        const skuParts = sku.split('-').filter(Boolean);
+        if (skuParts.length !== 5 || skuParts.some((part) => !/^[A-Z0-9]+$/.test(part))) {
+          throw new Error(
+            `Variant #${index + 1} SKU must follow BRAND-CATEGORY-PRODUCT-COLOR-SIZE format.`
+          );
+        }
+        const combination = [
+          variant?.title,
+          variant?.size,
+          variant?.color,
+        ].map((value) => String(value || '').trim().toLowerCase()).join('|');
+
+        if (sku && seenSkus.has(sku)) {
+          throw new Error(`Variant SKU code "${sku}" already exists.`);
+        }
+        if (sku) seenSkus.add(sku);
+
+        if (combination !== '||' && seenCombinations.has(combination)) {
+          throw new Error(`Variant #${index + 1} duplicates an existing size, color, and title combination.`);
+        }
+        if (combination !== '||') seenCombinations.add(combination);
+      });
+
       // Format tags array from comma-separated string
       const parsedTags = typeof formData.tags === 'string'
         ? formData.tags
@@ -666,21 +823,23 @@ export const ProductsPage = () => {
         throw new Error("Image sources must be a URL or an /uploads/... path — data URIs aren't accepted.");
       }
 
-      // Clean images
-      // Each variant must have exactly one primary image; fill any gap before saving.
-      const finalImages = ensureOnePrimaryPerVariant(formData.images, formData.variants);
-
-      const parsedImages = finalImages
+      // Clean images while preserving only the explicit variant mappings selected in the editor.
+      let globalPrimaryAssigned = false;
+      const parsedImages = formData.images
         .filter((img) => img.url && img.url.trim())
-        .map((img) => ({
+        .map((img) => {
+          const isPrimary = !!img.isPrimary && !globalPrimaryAssigned;
+          if (isPrimary) globalPrimaryAssigned = true;
+          return ({
           url: img.url.trim(),
           altText: img.altText ? img.altText.trim() : formData.name.trim(),
-          isPrimary: !!img.isPrimary,
+          isPrimary,
           // Both mappings have to travel with the image. Omitting them here is what silently
           // reset every variant assignment on save.
           variantSkus: (img.variantSkus || []).map((x) => String(x).toUpperCase()),
           primaryFor: (img.primaryFor || []).map((x) => String(x).toUpperCase()),
-        }));
+          });
+        });
 
       if (parsedImages.length === 0) {
         parsedImages.push({
@@ -691,10 +850,18 @@ export const ProductsPage = () => {
       }
 
       // Format variants
-      const parsedVariants = (formData.variants && formData.variants.length > 0 ? formData.variants : [defaultVariant]).map((v, idx) => {
+      const variantsToSave = formData.variants && formData.variants.length > 0
+        ? [
+            ...formData.variants.filter((variant) => !variant.isNewVariant),
+            ...formData.variants.filter((variant) => variant.isNewVariant).reverse(),
+          ]
+        : [defaultVariant];
+
+      const parsedVariants = variantsToSave.map((v, idx) => {
         // SKUs are the backend's responsibility — send the value through as typed.
         const skuVal = (v?.sku || '').trim().toUpperCase();
         return {
+          ...(v?._id ? { _id: v._id } : {}),
           sku: skuVal,
           title: v?.title ? v.title.trim() : `${v?.size || ''} ${v?.color || ''}`.trim() || 'Standard',
           size: v?.size ? v.size.trim() : 'Standard',
@@ -769,7 +936,7 @@ export const ProductsPage = () => {
         const thumbUrl = getProductThumbnailUrl(row);
         return (
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+            <div className="w-12 h-12 rounded-lg bg-transparent flex items-center justify-center overflow-hidden shrink-0">
               <img
                 src={thumbUrl}
                 alt={row.name}
@@ -1171,7 +1338,7 @@ export const ProductsPage = () => {
           {/* TAB 2: VARIANTS & PRICING */}
           {activeTab === 'variants' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                     Variant SKUs & Inventory Stock
@@ -1192,38 +1359,77 @@ export const ProductsPage = () => {
                 </Button>
               </div>
 
+              <SearchInput
+                value={variantSearch}
+                onChange={setVariantSearch}
+                onClear={() => setVariantSearch('')}
+                placeholder="Search variants by size, color, SKU, or title..."
+                className="w-full"
+              />
+
               <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
-                {formData.variants.map((v, idx) => (
+                {formData.variants
+                  .map((variant, index) => ({ variant, index }))
+                  .filter(({ variant }) => {
+                    const query = variantSearch.trim().toLowerCase();
+                    if (!query) return true;
+                    return [
+                      variant.size,
+                      variant.color,
+                      variant.sku,
+                      variant.title,
+                    ].some((value) => String(value || '').toLowerCase().includes(query));
+                  })
+                  .map(({ variant: v, index: idx }) => (
                   <div
-                    key={idx}
+                    key={v._id || `new-variant-${idx}`}
                     className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        {/* Thumbnail of the image this variant resolves to, so a row can be
-                            recognised without opening the Media tab. */}
+                    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        {/* Keep the representative image in its original position before the
+                            variant label; the remaining mapped images follow horizontally. */}
                         {(() => {
                           const src = getVariantImage(v);
                           return (
-                            <div className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 shrink-0 overflow-hidden flex items-center justify-center">
+                            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-transparent">
                               {src ? (
                                 <img
                                   src={src}
                                   alt={v?.title || `Variant ${idx + 1}`}
-                                  className="w-full h-full object-cover"
-                                  // Keep the tile: hiding the element entirely is what made a
-                                  // failed load look like the thumbnail was never added.
+                                  className="h-full w-full object-cover"
                                   onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
                                 />
                               ) : (
-                                <ImageOff className="w-4 h-4 text-slate-400" />
+                                <ImageOff className="mx-auto mt-3 w-4 h-4 text-slate-400" />
                               )}
                             </div>
                           );
                         })()}
                         <span className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
-                          Variant #{idx + 1}
+                          Variant #{v.variantNumber || idx + 1}
                         </span>
+                        <div
+                          className="flex min-w-0 max-w-[calc(100%-112px)] items-center gap-1.5 overflow-x-auto scrollbar-hidden"
+                          aria-label={`Images for variant ${idx + 1}`}
+                        >
+                          {getVariantImages(v).map((image, imageIndex) => (
+                            <img
+                              key={`${image.url}-${imageIndex}`}
+                              src={image.url}
+                              alt={image.altText || v?.title || `Variant ${idx + 1}`}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-14 w-14 shrink-0 rounded-lg bg-transparent object-cover"
+                              onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                            />
+                          ))}
+                          {getVariantImages(v).length === 0 && (
+                            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-transparent">
+                              <ImageOff className="w-4 h-4 text-slate-400" />
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {formData.variants.length > 1 && (
                         <button
@@ -1280,7 +1486,19 @@ export const ProductsPage = () => {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      ))}
+                        ))}
+                      {formData.variants.length > 0 &&
+                        !formData.variants.some((variant) => [
+                          variant.size,
+                          variant.color,
+                          variant.sku,
+                          variant.title,
+                        ].some((value) => String(value || '').toLowerCase().includes(variantSearch.trim().toLowerCase()))) &&
+                        variantSearch.trim() && (
+                          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 px-4 py-8 text-center text-xs text-slate-500">
+                            No variants match &quot;{variantSearch.trim()}&quot;.
+                          </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -1312,9 +1530,20 @@ export const ProductsPage = () => {
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          Size
-                        </label>
+                        <div className="mb-0.5 flex items-center gap-1">
+                          <label className="block text-[11px] text-slate-500 font-medium">
+                            Size
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIsSizeChartOpen(true)}
+                            title="View size chart"
+                            aria-label="View size chart"
+                            className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                         <input
                           type="text"
                           value={v.size}
@@ -1389,7 +1618,7 @@ export const ProductsPage = () => {
           {/* TAB 3: IMAGES & MEDIA */}
           {activeTab === 'images' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h4 className="font-semibold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                     Product Image Files & Media
@@ -1399,12 +1628,12 @@ export const ProductsPage = () => {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex w-full items-center gap-2 sm:w-auto">
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    className="text-xs py-1 px-2.5"
+                    className="w-full text-xs py-1 px-2.5 sm:w-auto"
                     leftIcon={Plus}
                     onClick={handleAddImage}
                   >
@@ -1426,7 +1655,7 @@ export const ProductsPage = () => {
               {/* Upload Dropzone */}
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-blue-300 dark:border-blue-900 hover:border-blue-500 dark:hover:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-6 text-center cursor-pointer transition-all group"
+                className="border-2 border-dashed border-blue-300 dark:border-blue-900 hover:border-blue-500 dark:hover:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-4 sm:p-6 text-center cursor-pointer transition-all group"
               >
                 {isUploadingImage ? (
                   <div className="flex flex-col items-center justify-center gap-2 py-2">
@@ -1441,10 +1670,10 @@ export const ProductsPage = () => {
                       <UploadCloud className="w-6 h-6" />
                     </div>
                     <div>
-                      <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
                         Click to browse or drag & drop image files
                       </span>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                         Supports PNG, JPG, JPEG, WEBP, SVG (Select single or multiple photos)
                       </p>
                     </div>
@@ -1468,14 +1697,14 @@ export const ProductsPage = () => {
                 {formData.images.map((img, idx) => (
                   <div
                     key={idx}
-                    className={`p-3 rounded-xl border flex items-center gap-3.5 transition-all ${
+                    className={`min-w-0 p-3 rounded-xl border flex flex-col items-stretch gap-3 transition-all sm:flex-row sm:items-center sm:gap-3.5 ${
                       img.isPrimary
-                        ? 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 shadow-xs'
+                        ? 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800'
                         : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
                     }`}
                   >
                     {/* Thumbnail Preview */}
-                    <div className="w-14 h-14 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                    <div className="h-[72px] w-[72px] self-center rounded-xl bg-transparent flex items-center justify-center overflow-hidden shrink-0 sm:self-auto">
                       {img.url ? (
                         <img
                           src={resolveMediaUrl(img.url)}
@@ -1492,7 +1721,7 @@ export const ProductsPage = () => {
                       )}
                     </div>
 
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <div>
                         <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-0.5">
                           Image File Source
@@ -1536,13 +1765,13 @@ export const ProductsPage = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
                       <button
                         type="button"
                         onClick={() => handleUpdateImage(idx, 'isPrimary', true)}
                         className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${
                           img.isPrimary
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-400'
                         }`}
                       >
@@ -1602,6 +1831,56 @@ export const ProductsPage = () => {
         </form>
           </>
         )}
+      </Modal>
+      <Modal
+        isOpen={isSizeChartOpen}
+        onClose={() => setIsSizeChartOpen(false)}
+        title="SIZE & FIT GUIDE"
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Ruler className="h-4 w-4 text-red-600" />
+            <span>Find the perfect gear dimensions for maximum performance.</span>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800">
+                <tr>
+                  <th className="px-3 py-2 font-semibold text-red-600">Size Variant</th>
+                  <th className="px-3 py-2 font-semibold text-red-600">Length / Circumference</th>
+                  <th className="px-3 py-2 font-semibold text-red-600">Recommended Use</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {getPdpSizeChartRows(
+                  categories.find((category) => String(category._id) === String(formData.category))?.name
+                    || editingProduct?.category?.name
+                    || ''
+                ).map((row) => (
+                  <tr key={row.sizeVariant}>
+                    <td className="whitespace-nowrap px-3 py-2 font-bold text-slate-900 dark:text-slate-100">
+                      {row.sizeVariant}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                      {row.dimensions}
+                    </td>
+                    <td className={`px-3 py-2 ${row.sizeVariant === '18-Inch Competition' ? 'font-semibold text-red-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                      {row.recommendedUse}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/50 p-3.5 text-xs text-slate-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-slate-300">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <p>
+              <strong className="text-slate-900 dark:text-slate-100">Pro Tip:</strong>{' '}
+              Measure circumference directly across your joint while flexed. If you are between sizes, choose the larger size for maximum wrapping overlap.
+            </p>
+          </div>
+        </div>
       </Modal>
     </div>
   );
