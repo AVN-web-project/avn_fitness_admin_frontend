@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Tag, MessageSquare, AlertCircle, RefreshCw, Check, X, Shield } from 'lucide-react';
+import { Plus, Tag, MessageSquare, AlertCircle, RefreshCw, Check, X, Shield, Megaphone } from 'lucide-react';
 import { marketingApi } from '../../services/marketingApi.js';
 import { useToast } from '../../hooks/useToast.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
@@ -13,7 +13,8 @@ import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
 import { useDataCache, cacheKey } from '../../context/DataCacheContext.jsx';
 
 export const MarketingPage = () => {
-  const [activeTab, setActiveTab] = useState('coupons'); // 'coupons' | 'reviews'
+  const [activeTab, setActiveTab] = useState('coupons'); // coupons | reviews | announcement
+  const toast = useToast();
 
   // Coupons State
   const [coupons, setCoupons] = useState([]);
@@ -33,6 +34,72 @@ export const MarketingPage = () => {
     maxDiscountAmount: 300,
     validTillDays: 30,
   });
+
+  // Storefront announcement strip state
+  const [announcement, setAnnouncement] = useState({ isEnabled: false, message: '', type: 'custom' });
+  const [announcementLoading, setAnnouncementLoading] = useState(false);
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [announcementError, setAnnouncementError] = useState('');
+
+  const fetchAnnouncement = async () => {
+    setAnnouncementLoading(true);
+    setAnnouncementError('');
+
+    try {
+      const res = await marketingApi.getAnnouncementStrip();
+      const data =
+        res?.announcementStrip ??
+        res?.data?.announcementStrip ??
+        res?.data ??
+        res;
+
+      setAnnouncement({
+        isEnabled: data?.isEnabled ?? false,
+        message: data?.message ?? '',
+        type: data?.type ?? 'custom',
+      });
+    } catch (err) {
+      console.error('Announcement fetch error:', err);
+      setAnnouncementError(err.message || 'Failed to load announcement strip.');
+    } finally {
+      setAnnouncementLoading(false);
+    }
+  };
+
+  // Load the saved announcement when the Marketing page first mounts.
+  useEffect(() => {
+    fetchAnnouncement();
+  }, []);
+
+  const handleSaveAnnouncement = async (e) => {
+    e.preventDefault();
+    setAnnouncementSaving(true);
+    setAnnouncementError('');
+
+    try {
+      const res = await marketingApi.updateAnnouncementStrip(announcement);
+      const data =
+        res?.announcementStrip ??
+        res?.data?.announcementStrip ??
+        res?.data ??
+        res;
+
+      if (data && typeof data === 'object') {
+        setAnnouncement({
+          isEnabled: data.isEnabled ?? announcement.isEnabled,
+          message: data.message ?? announcement.message,
+          type: data.type ?? announcement.type,
+        });
+      }
+
+      toast.success('Storefront announcement strip saved.');
+    } catch (err) {
+      console.error('Announcement save error:', err);
+      setAnnouncementError(err.message || 'Failed to save announcement strip.');
+    } finally {
+      setAnnouncementSaving(false);
+    }
+  };
 
   // Reviews Moderation State
   const [reviews, setReviews] = useState([]);
@@ -93,12 +160,12 @@ export const MarketingPage = () => {
   useEffect(() => {
     if (activeTab === 'coupons') {
       fetchCoupons();
-    } else {
+    } else if (activeTab === 'reviews') {
       fetchReviews();
+    } else {
+      fetchAnnouncement();
     }
   }, [activeTab]);
-
-  const toast = useToast();
 
   const handleCreateCoupon = async (e) => {
     e.preventDefault();
@@ -281,7 +348,7 @@ export const MarketingPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Marketing & Campaigns"
-        subtitle="Manage discount vouchers, promotional coupons, and product review moderation."
+        subtitle="Manage coupons, review moderation, and storefront announcements."
         action={
           activeTab === 'coupons' ? (
             <Button
@@ -324,6 +391,18 @@ export const MarketingPage = () => {
           <MessageSquare className="w-4 h-4" />
           <span>Review Moderation Queue</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('announcement')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors ${
+            activeTab === 'announcement'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          <span>Announcement Strip</span>
+        </button>
       </div>
 
       {activeTab === 'coupons' ? (
@@ -335,7 +414,7 @@ export const MarketingPage = () => {
           onRetry={fetchCoupons}
           emptyTitle="No coupons created yet"
         />
-      ) : (
+      ) : activeTab === 'reviews' ? (
         <DataTable
           columns={reviewColumns}
           data={reviews}
@@ -344,6 +423,43 @@ export const MarketingPage = () => {
           onRetry={fetchReviews}
           emptyTitle="No reviews pending moderation"
         />
+      ) : (
+        <div className="max-w-3xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-7">
+          <div className="flex items-start gap-3 mb-6">
+            <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"><Megaphone className="w-5 h-5" /></div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Storefront Announcement Strip</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Display a message above the homepage hero. Use it for festive offers, stock clearance or occasional campaigns.</p>
+            </div>
+          </div>
+          {announcementError && <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-sm text-rose-700 dark:text-rose-300">{announcementError}</div>}
+          {announcementLoading ? <div className="py-8 text-center text-sm text-slate-500">Loading announcement settings…</div> : (
+            <form onSubmit={handleSaveAnnouncement} className="space-y-5">
+              <label className="flex items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <span><span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">Display announcement strip</span><span className="block text-xs text-slate-500 mt-1">Turn the strip on or hide it without deleting the message.</span></span>
+                <input type="checkbox" checked={!!announcement.isEnabled} onChange={(e) => setAnnouncement({ ...announcement, isEnabled: e.target.checked })} className="w-5 h-5 accent-blue-600" />
+              </label>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-2">Announcement category</label>
+                <select value={announcement.type || 'custom'} onChange={(e) => setAnnouncement({ ...announcement, type: e.target.value })} className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                  <option value="festive">Festive</option><option value="stock_clearance">Stock Clearance</option><option value="seasonal_sale">Seasonal Sale</option><option value="special_offer">Special Offer</option><option value="custom">Custom Announcement</option>
+                </select>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2"><label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Message</label><span className="text-xs text-slate-400">{(announcement.message || '').length}/240</span></div>
+                <textarea required maxLength={240} rows={3} value={announcement.message || ''} onChange={(e) => setAnnouncement({ ...announcement, message: e.target.value })} placeholder="e.g. FESTIVE SALE IS LIVE — UP TO 40% OFF SELECTED GEAR" className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm resize-y" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-2">Live preview</label>
+                <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)] px-4 py-4 text-center">
+                  <p className="font-heading text-xs sm:text-sm font-black italic tracking-[0.16em] uppercase text-[var(--text-main)]">{announcement.message || 'YOUR ANNOUNCEMENT WILL APPEAR HERE'}</p>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Preview uses the storefront's footer-marquee-inspired bold italic typography and subtle border treatment.</p>
+              </div>
+              <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800"><Button type="submit" variant="primary" isLoading={announcementSaving}>Save Announcement</Button></div>
+            </form>
+          )}
+        </div>
       )}
 
       {/* Create Coupon Modal */}

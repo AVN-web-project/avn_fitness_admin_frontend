@@ -40,6 +40,7 @@ export const PERMISSIONS = {
   COUPONS_ACTIVATE: 'coupons.activate',
   REVIEWS_VIEW: 'reviews.view',
   REVIEWS_MODERATE: 'reviews.moderate',
+  MARKETING_ANNOUNCEMENT_EDIT: 'marketing.announcement.edit',
 
   // Finance & Payments
   PAYMENTS_VIEW: 'payments.view',

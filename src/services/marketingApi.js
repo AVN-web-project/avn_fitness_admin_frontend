@@ -1,3 +1,4 @@
+
 import api from './api.js';
 
 export const marketingApi = {
@@ -31,5 +32,16 @@ export const marketingApi = {
   moderateReview: async (id, status) => {
     const res = await api.patch(`/reviews/${id}/moderate`, { status });
     return res.data;
+  },
+
+  // Marketing Announcements
+  getAnnouncementStrip: async () => {
+    const res = await api.get('/marketing/announcement-strip');
+    return res;
+  },
+
+  updateAnnouncementStrip: async (payload) => {
+    const res = await api.put('/marketing/announcement-strip', payload);
+    return res;
   },
 };
