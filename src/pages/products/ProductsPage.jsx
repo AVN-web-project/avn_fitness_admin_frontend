@@ -125,6 +125,8 @@ export const ProductsPage = () => {
     color: 'Standard',
     price: 499,
     compareAtPrice: 699,
+    discountNote: '',
+    showDiscountNote: false,
     stockQuantity: 50,
     isActive: true,
     specifications: [],
@@ -389,6 +391,8 @@ export const ProductsPage = () => {
               : [],
             price: Number(v.price) || 0,
             compareAtPrice: Number(v.compareAtPrice) || 0,
+            discountNote: v.discountNote || '',
+            showDiscountNote: v.showDiscountNote === true,
             stockQuantity: Number(v.stockQuantity) || 0,
             isActive: v.isActive !== false,
           }))
@@ -500,6 +504,8 @@ export const ProductsPage = () => {
           title: `Variant ${nextVariantNumber}`,
           price: Number(formData.variants[0]?.price) || 499,
           compareAtPrice: Number(formData.variants[0]?.compareAtPrice) || 699,
+          discountNote: formData.variants[0]?.discountNote || '',
+          showDiscountNote: formData.variants[0]?.showDiscountNote === true,
           stockQuantity: 25,
         },
         ...formData.variants,
@@ -776,7 +782,15 @@ export const ProductsPage = () => {
       // Validate mandatory fields
       if (!formData.name.trim()) throw new Error('Product name is required.');
       if (!formData.category) throw new Error('Please select a category for this product.');
-      if (!formData.description.trim()) throw new Error('Product description is required.');
+            if (!formData.description.trim()) throw new Error('Product description is required.');
+
+            // Mirrors the server rule, so the failure surfaces before the request is sent.
+            const missingMrp = (formData.variants || []).find((v) => !(Number(v?.compareAtPrice) > 0));
+            if (missingMrp) {
+              throw new Error(
+                `Variant "${missingMrp.sku || missingMrp.title || 'unnamed'}" needs an MRP greater than 0 — a product cannot be listed without one.`
+              );
+            }
       if (!formData.variants || formData.variants.length === 0) {
         throw new Error('At least one variant SKU must be configured.');
       }
@@ -868,6 +882,8 @@ export const ProductsPage = () => {
           color: v?.color ? v.color.trim() : 'Standard',
           price: Number(v?.price) || 0,
           compareAtPrice: Number(v?.compareAtPrice) || 0,
+          discountNote: v?.discountNote ? v.discountNote.trim() : '',
+          showDiscountNote: v?.showDiscountNote === true,
           specifications: (v?.specifications || [])
             .filter((sp) => sp?.key?.trim() && sp?.value?.trim())
             .map((sp) => ({ key: sp.key.trim(), value: sp.value.trim() })),
@@ -1567,7 +1583,7 @@ export const ProductsPage = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                       <div>
                         <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
                           Selling Price (₹) *
@@ -1583,16 +1599,45 @@ export const ProductsPage = () => {
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
-                          MRP / Compare Price (₹)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={v.compareAtPrice}
+                                                  <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                                                    MRP / Compare Price (₹) *
+                                                  </label>
+                                                  <input
+                                                    type="number"
+                                                    min={1}
+                                                    required
+                                                    value={v.compareAtPrice}
                           onChange={(e) => handleUpdateVariant(idx, 'compareAtPrice', e.target.value)}
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs"
                         />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                          Discount Note
+                        </label>
+                        <input
+                          type="text"
+                          value={v.discountNote || ''}
+                          onChange={(e) => handleUpdateVariant(idx, 'discountNote', e.target.value)}
+                          placeholder="e.g. Limited-time offer"
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <label className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                          <span>Show discount note</span>
+                          <input
+                            type="checkbox"
+                            checked={v.showDiscountNote === true}
+                            onChange={(e) => handleUpdateVariant(idx, 'showDiscountNote', e.target.checked)}
+                            className="peer sr-only"
+                          />
+                          <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${v.showDiscountNote ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${v.showDiscountNote ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </span>
+                        </label>
                       </div>
 
                       <div>

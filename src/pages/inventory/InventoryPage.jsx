@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Boxes, Edit3, RefreshCw, AlertCircle, Save, AlertTriangle, PackageX, Layers, EyeOff } from 'lucide-react';
 import { inventoryApi } from '../../services/inventoryApi.js';
+import { productsApi } from '../../services/productsApi.js';
 import PageHeader from '../../components/layout/PageHeader.jsx';
 import { useAutoRefresh } from '../../hooks/useAutoRefresh.js';
 import { useAutoRefreshContext } from '../../context/AutoRefreshContext.jsx';
@@ -21,6 +22,11 @@ export const InventoryPage = () => {
   const [metaCounts, setMetaCounts] = useState({ lowStock: 0, outOfStock: 0, inactive: 0, total: 0 });
   const debouncedSearch = useDebounce(search, 300);
 
+  // The inventory endpoint only carries the selling price, so the base (compare-at) price and the
+  // occasion discount come from the products instead. Fetched once and keyed by SKU, which keeps this
+  // page correct whether or not the API has been taught to return those fields.
+  const [priceMeta, setPriceMeta] = useState({});
+
   // Stock Edit Modal State
   const [selectedItem, setSelectedItem] = useState(null);
   const [newStock, setNewStock] = useState(0);
@@ -29,6 +35,12 @@ export const InventoryPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  // Declared before fetchInventory: it closes over these three, so defining them afterwards left them
+  // in the temporal dead zone for the lifetime of the first render.
+  const { markUpdated } = useAutoRefreshContext();
+  const toast = useToast();
+  const cache = useDataCache();
 
   const fetchInventory = async ({ silent = false } = {}) => {
     const params = {
@@ -40,7 +52,10 @@ export const InventoryPage = () => {
     const cached = cache.read(key);
     if (cached && !silent) {
       const list = Array.isArray(cached.items) ? cached.items : [];
-      if (list.length) { setItems(list); setLoading(false); }
+      if (list.length) {
+        setItems(list);
+        setLoading(false);
+      }
     }
 
     try {
@@ -77,7 +92,7 @@ export const InventoryPage = () => {
         inventoryList = res;
       }
 
-      // Calculate stats across full inventory set
+      // Calculate stats across the full inventory set
       const lowCount =
         res.lowStockCount ??
         inventoryList.filter(
@@ -86,16 +101,15 @@ export const InventoryPage = () => {
             Number(i.stockQuantity) > 0
         ).length;
       const outCount =
-        res.outOfStockCount ??
-        inventoryList.filter((i) => (Number(i.stockQuantity) || 0) === 0).length;
+        res.outOfStockCount ?? inventoryList.filter((i) => (Number(i.stockQuantity) || 0) === 0).length;
       const inactCount =
         res.inactiveProductSkusCount ??
         inventoryList.filter((i) => i.productStatus === 'inactive' || i.isProductActive === false).length;
 
       setMetaCounts({
-        // res.total is the FILTERED length; res.totalSkus is the global count.
-        // The stat tiles and chip labels must show the global figure, otherwise
-        // picking a filter makes "total SKUs tracked" shrink to the filtered count.
+        // res.total is the FILTERED length; res.totalSkus is the global count. The stat tiles and chip
+        // labels must show the global figure, otherwise picking a filter makes "total SKUs tracked"
+        // shrink to the filtered count.
         total: res.totalSkus || res.total || inventoryList.length,
         lowStock: lowCount,
         outOfStock: outCount,
@@ -106,7 +120,9 @@ export const InventoryPage = () => {
       if (filterType === 'outOfStock') {
         inventoryList = inventoryList.filter((item) => Number(item.stockQuantity) === 0);
       } else if (filterType === 'inactive') {
-        inventoryList = inventoryList.filter((item) => item.productStatus === 'inactive' || item.isProductActive === false);
+        inventoryList = inventoryList.filter(
+          (item) => item.productStatus === 'inactive' || item.isProductActive === false
+        );
       }
 
       setItems(inventoryList);
@@ -119,9 +135,34 @@ export const InventoryPage = () => {
     }
   };
 
-  const { markUpdated } = useAutoRefreshContext();
-  const toast = useToast();
-  const cache = useDataCache();
+  // Price metadata for the Base / Final columns.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productsApi.getProducts({ limit: 100 });
+        const list = res?.products || res?.items || [];
+        const map = {};
+        list.forEach((prod) => {
+          const festive = Math.max(0, Math.min(90, Number(prod.festiveDiscountPercent) || 0));
+          (prod.variants || []).forEach((v) => {
+            if (!v?.sku) return;
+            map[String(v.sku).trim().toUpperCase()] = {
+              compareAtPrice: Number(v.compareAtPrice) || 0,
+              festiveDiscountPercent: festive,
+            };
+          });
+        });
+        if (!cancelled) setPriceMeta(map);
+      } catch {
+        // Fall back to whatever the inventory row carries; the columns still render.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useAutoRefresh(fetchInventory, { intervalMs: 60000 });
 
   useEffect(() => {
@@ -168,9 +209,7 @@ export const InventoryPage = () => {
   const handleAvailabilityChange = async (sku, isAvailable) => {
     try {
       // Optimistic UI update
-      setItems((prev) =>
-        prev.map((item) => (item.sku === sku ? { ...item, isAvailable } : item))
-      );
+      setItems((prev) => prev.map((item) => (item.sku === sku ? { ...item, isAvailable } : item)));
 
       await inventoryApi.updateProductAvailability(sku, isAvailable);
 
@@ -187,22 +226,19 @@ export const InventoryPage = () => {
       key: 'sku',
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+          {/* SKUs are read as one token. Left to wrap, "AVN-KS-KW-RED-79IN" broke at every hyphen
+              into four lines. The table already scrolls horizontally, so let it stay on one line. */}
+          <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded whitespace-nowrap">
             {row.sku}
           </span>
         </div>
       ),
     },
     {
-      header: 'Product & Variant',
+      header: 'Product',
       key: 'productName',
       render: (row) => (
-        <div className="space-y-0.5">
-          <div className="font-semibold text-slate-900 dark:text-slate-100">{row.productName}</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            {row.variantTitle || `${row.size || ''} ${row.color || ''}`.trim() || 'Standard Variant'}
-          </div>
-        </div>
+        <div className="font-semibold text-slate-900 dark:text-slate-100">{row.productName}</div>
       ),
     },
     {
@@ -215,7 +251,7 @@ export const InventoryPage = () => {
       ),
     },
     {
-      header: 'Attributes',
+      header: 'Variant Attributes',
       key: 'attributes',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-xs">
@@ -233,13 +269,46 @@ export const InventoryPage = () => {
       ),
     },
     {
-      header: 'Unit Price',
-      key: 'price',
-      render: (row) => (
-        <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
-          ₹{Number(row.price || 0).toLocaleString('en-IN')}
-        </span>
-      ),
+      // Base price is the compare-at / MRP figure, not the selling price — `price` already has the
+      // base discount taken off it, which is what made this column look wrong.
+      header: 'Base Price',
+      key: 'basePrice',
+      render: (row) => {
+        const meta = priceMeta[String(row.sku || '').trim().toUpperCase()] || {};
+        const selling = Number(row.price ?? 0) || 0;
+        const base = Number(row.basePrice ?? meta.compareAtPrice ?? selling) || 0;
+        return (
+          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">
+            ₹{base.toLocaleString('en-IN')}
+          </span>
+        );
+      },
+    },
+    {
+      // Base discount and occasion discount together — what the storefront actually charges.
+      // Display-only, so ending a sale reverts this column with nothing to clean up.
+      header: 'Final Price',
+      key: 'finalPrice',
+      render: (row) => {
+        const meta = priceMeta[String(row.sku || '').trim().toUpperCase()] || {};
+        const selling = Number(row.price ?? 0) || 0;
+        const festive = Number(meta.festiveDiscountPercent) || 0;
+        // Same rule as the server: apply the percentage, never below the ₹200 floor.
+        const reduced = festive > 0 ? Math.max(200, Math.round(selling * (1 - festive / 100))) : selling;
+        const final = Number(row.finalPrice ?? reduced);
+        const base = Number(row.basePrice ?? meta.compareAtPrice ?? selling) || 0;
+        const discounted = base > final && final > 0;
+
+        return (
+          <span
+            className={`font-semibold text-sm ${
+              discounted ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'
+            }`}
+          >
+            ₹{final.toLocaleString('en-IN')}
+          </span>
+        );
+      },
     },
     {
       header: 'In Stock',
@@ -257,8 +326,8 @@ export const InventoryPage = () => {
                 isOut
                   ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                   : isLow
-                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
               }`}
             >
               {qty}
@@ -322,7 +391,7 @@ export const InventoryPage = () => {
         <Button
           variant="secondary"
           size="sm"
-          className="text-xs py-1 px-2.5 shadow-sm hover:border-blue-400"
+          className="text-xs py-1 px-2.5 shadow-sm hover:border-blue-400 whitespace-nowrap"
           leftIcon={Edit3}
           onClick={() => handleOpenStockModal(row)}
         >
@@ -358,9 +427,7 @@ export const InventoryPage = () => {
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
             {metaCounts.total || items.length}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Warehouse SKU records
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Warehouse SKU records</p>
         </div>
 
         <div
@@ -380,9 +447,7 @@ export const InventoryPage = () => {
           <div className="mt-2 text-2xl font-bold text-amber-600 dark:text-amber-400">
             {metaCounts.lowStock}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Quantity ≤ threshold
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Quantity ≤ threshold</p>
         </div>
 
         <div
@@ -402,9 +467,7 @@ export const InventoryPage = () => {
           <div className="mt-2 text-2xl font-bold text-rose-600 dark:text-rose-400">
             {metaCounts.outOfStock}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Zero physical inventory
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Zero physical inventory</p>
         </div>
 
         <div
@@ -424,9 +487,7 @@ export const InventoryPage = () => {
           <div className="mt-2 text-2xl font-bold text-rose-600 dark:text-rose-400">
             {metaCounts.inactive}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Products marked inactive
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Products marked inactive</p>
         </div>
       </div>
 
@@ -497,7 +558,6 @@ export const InventoryPage = () => {
         onRetry={fetchInventory}
         emptyTitle="No inventory records found"
       />
-
 
       {/* Stock Adjustment Modal */}
       <Modal

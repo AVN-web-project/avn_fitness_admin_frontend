@@ -36,7 +36,7 @@ export const MarketingPage = () => {
   });
 
   // Storefront announcement strip state
-  const [announcement, setAnnouncement] = useState({ isEnabled: false, message: '', type: 'custom' });
+  const [announcement, setAnnouncement] = useState({ isEnabled: false, messages: [] });
   const [announcementLoading, setAnnouncementLoading] = useState(false);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [announcementError, setAnnouncementError] = useState('');
@@ -55,8 +55,14 @@ export const MarketingPage = () => {
 
       setAnnouncement({
         isEnabled: data?.isEnabled ?? false,
-        message: data?.message ?? '',
-        type: data?.type ?? 'custom',
+        messages: (data?.messages?.length ? data.messages : data?.message ? [{
+          message: data.message,
+          type: data.type || 'custom',
+          isEnabled: true,
+          order: 0,
+          startAt: null,
+          endAt: null,
+        }] : []).map((item, index) => ({ ...item, isEnabled: item.isEnabled !== false, order: item.order ?? index })),
       });
     } catch (err) {
       console.error('Announcement fetch error:', err);
@@ -87,8 +93,7 @@ export const MarketingPage = () => {
       if (data && typeof data === 'object') {
         setAnnouncement({
           isEnabled: data.isEnabled ?? announcement.isEnabled,
-          message: data.message ?? announcement.message,
-          type: data.type ?? announcement.type,
+          messages: data.messages ?? announcement.messages,
         });
       }
 
@@ -99,6 +104,51 @@ export const MarketingPage = () => {
     } finally {
       setAnnouncementSaving(false);
     }
+  };
+
+  const updateAnnouncementMessage = (index, changes) => {
+    setAnnouncement((current) => ({
+      ...current,
+      messages: current.messages.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...changes } : item
+      )),
+    }));
+  };
+
+  const addAnnouncementMessage = () => {
+    setAnnouncement((current) => ({
+      ...current,
+      messages: [
+        ...current.messages,
+        {
+          message: '',
+          type: 'custom',
+          isEnabled: true,
+          order: current.messages.length,
+          startAt: null,
+          endAt: null,
+        },
+      ],
+    }));
+  };
+
+  const removeAnnouncementMessage = (index) => {
+    setAnnouncement((current) => ({
+      ...current,
+      messages: current.messages
+        .filter((_, itemIndex) => itemIndex !== index)
+        .map((item, itemIndex) => ({ ...item, order: itemIndex })),
+    }));
+  };
+
+  const moveAnnouncementMessage = (index, direction) => {
+    setAnnouncement((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.messages.length) return current;
+      const messages = [...current.messages];
+      [messages[index], messages[nextIndex]] = [messages[nextIndex], messages[index]];
+      return { ...current, messages: messages.map((item, itemIndex) => ({ ...item, order: itemIndex })) };
+    });
   };
 
   // Reviews Moderation State
@@ -435,24 +485,45 @@ export const MarketingPage = () => {
           {announcementError && <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-sm text-rose-700 dark:text-rose-300">{announcementError}</div>}
           {announcementLoading ? <div className="py-8 text-center text-sm text-slate-500">Loading announcement settings…</div> : (
             <form onSubmit={handleSaveAnnouncement} className="space-y-5">
-              <label className="flex items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span><span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">Display announcement strip</span><span className="block text-xs text-slate-500 mt-1">Turn the strip on or hide it without deleting the message.</span></span>
-                <input type="checkbox" checked={!!announcement.isEnabled} onChange={(e) => setAnnouncement({ ...announcement, isEnabled: e.target.checked })} className="w-5 h-5 accent-blue-600" />
-              </label>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-2">Announcement category</label>
-                <select value={announcement.type || 'custom'} onChange={(e) => setAnnouncement({ ...announcement, type: e.target.value })} className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
-                  <option value="festive">Festive</option><option value="stock_clearance">Stock Clearance</option><option value="seasonal_sale">Seasonal Sale</option><option value="special_offer">Special Offer</option><option value="custom">Custom Announcement</option>
-                </select>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2"><label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Message</label><span className="text-xs text-slate-400">{(announcement.message || '').length}/240</span></div>
-                <textarea required maxLength={240} rows={3} value={announcement.message || ''} onChange={(e) => setAnnouncement({ ...announcement, message: e.target.value })} placeholder="e.g. FESTIVE SALE IS LIVE — UP TO 40% OFF SELECTED GEAR" className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm resize-y" />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Messages</label>
+                    <p className="text-xs text-slate-500 mt-1">Messages display in order with spacing and no separators. Dates are optional.</p>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={addAnnouncementMessage}><Plus className="w-4 h-4 mr-1" />Add message</Button>
+                </div>
+                {announcement.messages.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-5 text-sm text-slate-500 text-center">No messages added yet.</div>}
+                {announcement.messages.map((item, index) => (
+                  <div key={item._id || index} className="rounded-xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">Message {index + 1}</span>
+                      <div className="flex items-center gap-1">
+                        <label className="flex items-center gap-2 mr-2 text-xs text-slate-500">
+                          <input type="checkbox" checked={item.isEnabled !== false} onChange={(e) => updateAnnouncementMessage(index, { isEnabled: e.target.checked })} className="w-4 h-4 accent-blue-600" />
+                          On
+                        </label>
+                        <Button type="button" variant="ghost" disabled={index === 0} onClick={() => moveAnnouncementMessage(index, -1)} aria-label="Move message up">↑</Button>
+                        <Button type="button" variant="ghost" disabled={index === announcement.messages.length - 1} onClick={() => moveAnnouncementMessage(index, 1)} aria-label="Move message down">↓</Button>
+                        <Button type="button" variant="ghost" onClick={() => removeAnnouncementMessage(index)} aria-label="Remove message"><X className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                    <textarea required maxLength={240} rows={2} value={item.message || ''} onChange={(e) => updateAnnouncementMessage(index, { message: e.target.value })} placeholder="e.g. FESTIVE SALE IS LIVE — UP TO 40% OFF SELECTED GEAR" className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm resize-y" />
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <select value={item.type || 'custom'} onChange={(e) => updateAnnouncementMessage(index, { type: e.target.value })} className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm">
+                        <option value="festive">Festive</option><option value="stock_clearance">Stock Clearance</option><option value="seasonal_sale">Seasonal Sale</option><option value="special_offer">Special Offer</option><option value="custom">Custom Announcement</option>
+                      </select>
+                      <input type="datetime-local" value={item.startAt ? new Date(item.startAt).toISOString().slice(0, 16) : ''} onChange={(e) => updateAnnouncementMessage(index, { startAt: e.target.value ? new Date(e.target.value).toISOString() : null })} className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" aria-label="Start date and time" />
+                      <input type="datetime-local" value={item.endAt ? new Date(item.endAt).toISOString().slice(0, 16) : ''} onChange={(e) => updateAnnouncementMessage(index, { endAt: e.target.value ? new Date(e.target.value).toISOString() : null })} className="w-full px-3.5 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm" aria-label="End date and time" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs text-slate-500"><span>Start date/time</span><span>End date/time</span></div>
+                  </div>
+                ))}
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-2">Live preview</label>
                 <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-main)] px-4 py-4 text-center">
-                  <p className="font-heading text-xs sm:text-sm font-black italic tracking-[0.16em] uppercase text-[var(--text-main)]">{announcement.message || 'YOUR ANNOUNCEMENT WILL APPEAR HERE'}</p>
+                  <p className="font-heading text-xs sm:text-sm font-black italic tracking-[0.16em] uppercase text-[var(--text-main)]">{announcement.messages.map((item) => item.message).filter(Boolean).join('     ') || 'YOUR ANNOUNCEMENT WILL APPEAR HERE'}</p>
                 </div>
                 <p className="text-xs text-slate-500 mt-2">Preview uses the storefront's footer-marquee-inspired bold italic typography and subtle border treatment.</p>
               </div>
