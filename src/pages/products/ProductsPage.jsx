@@ -58,6 +58,11 @@ const PRODUCT_STATUS_FILTERS = [
   { value: PRODUCT_STATUS.INACTIVE, label: 'Inactive' },
 ];
 
+const MEASUREMENT_TYPES = [
+  { value: 'supportGear', label: 'Support Gear', description: 'Size, fit, length, width, height, and weight' },
+  { value: 'shaker', label: 'Shaker', description: 'Volume, height, diameter, weight, and material' },
+];
+
 const getPdpSizeChartRows = (category) => {
   const categoryName = String(category || '').toUpperCase();
 
@@ -146,6 +151,26 @@ export const ProductsPage = () => {
     value: '',
   };
 
+  const defaultSizeChartRow = {
+    size: 'S',
+    fit: '',
+    volume: '',
+    volumeUnit: 'ml',
+    chest: '',
+    waist: '',
+    hip: '',
+    length: '',
+    shoulder: '',
+    sleeveLength: '',
+    width: '',
+    height: '',
+    diameter: '',
+    weight: '',
+    weightUnit: 'g',
+    material: '',
+    customFields: [],
+  };
+
   const initialFormState = {
     name: '',
     slug: '',
@@ -153,11 +178,19 @@ export const ProductsPage = () => {
     tagline: '',
     description: '',
     badge: '',
+    festiveDiscountPercent: 0,
     status: PRODUCT_STATUS.ACTIVE,
     ageGroup: 'all',
     gender: 'unisex',
     tags: '',
     careInstructions: '',
+    sizeGuide: {
+      measurementType: 'supportGear',
+      unit: 'cm',
+      volumeUnit: 'ml',
+      notes: '',
+      rows: [],
+    },
     variants: [defaultVariant],
     images: [defaultImage],
   };
@@ -246,6 +279,102 @@ export const ProductsPage = () => {
     setFormError('');
     setIsModalOpen(true);
   };
+
+  const handleAddSizeChartRow = () => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: [...(previous.sizeGuide?.rows || []), {
+          ...defaultSizeChartRow,
+          size: '',
+        }],
+      },
+    }));
+  };
+
+  const handleUpdateSizeChartRow = (index, field, value) => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: (previous.sizeGuide?.rows || []).map((row, rowIndex) =>
+          rowIndex === index ? { ...row, [field]: value } : row
+        ),
+      },
+    }));
+  };
+
+  const handleRemoveSizeChartRow = (index) => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: (previous.sizeGuide?.rows || []).filter((_, rowIndex) => rowIndex !== index),
+      },
+    }));
+  };
+
+  const handleAddCustomMeasurementField = (rowIndex) => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: (previous.sizeGuide?.rows || []).map((row, index) =>
+          index === rowIndex
+            ? {
+                ...row,
+                customFields: [...(row.customFields || []), { label: '', value: '' }],
+              }
+            : row
+        ),
+      },
+    }));
+  };
+
+  const handleUpdateCustomMeasurementField = (rowIndex, fieldIndex, field, value) => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: (previous.sizeGuide?.rows || []).map((row, index) =>
+          index === rowIndex
+            ? {
+                ...row,
+                customFields: (row.customFields || []).map((customField, customIndex) =>
+                  customIndex === fieldIndex
+                    ? { ...customField, [field]: value }
+                    : customField
+                ),
+              }
+            : row
+        ),
+      },
+    }));
+  };
+
+  const handleRemoveCustomMeasurementField = (rowIndex, fieldIndex) => {
+    setFormData((previous) => ({
+      ...previous,
+      sizeGuide: {
+        ...previous.sizeGuide,
+        rows: (previous.sizeGuide?.rows || []).map((row, index) =>
+          index === rowIndex
+            ? {
+                ...row,
+                customFields: (row.customFields || []).filter(
+                  (_, customIndex) => customIndex !== fieldIndex
+                ),
+              }
+            : row
+        ),
+      },
+    }));
+  };
+
+  const measurementType = formData.sizeGuide?.measurementType === 'shaker'
+    ? 'shaker'
+    : 'supportGear';
 
   // --- Media tab: per-variant image scoping ---------------------------------------
   const skuOf = (x) => String(x || '').trim().toUpperCase();
@@ -386,6 +515,8 @@ export const ProductsPage = () => {
             title: v.title || 'Standard',
             size: v.size || 'Standard',
             color: v.color || 'Standard',
+            volume: v.volume || '',
+            volumeUnit: v.volumeUnit || 'ml',
             specifications: Array.isArray(v.specifications)
               ? v.specifications.map((x) => ({ key: x?.key || '', value: x?.value || '' }))
               : [],
@@ -449,11 +580,29 @@ export const ProductsPage = () => {
       tagline: product.tagline || '',
       description: product.description || '',
       badge: product.badge || '',
+      festiveDiscountPercent: Number(product.festiveDiscountPercent) || 0,
       status: product.status === 'inactive' ? PRODUCT_STATUS.INACTIVE : PRODUCT_STATUS.ACTIVE,
       ageGroup: product.ageGroup || 'all',
       gender: product.gender || 'unisex',
       tags: Array.isArray(product.tags) ? product.tags.join(', ') : product.tags || '',
       careInstructions: product.careInstructions || '',
+      sizeGuide: {
+        measurementType: MEASUREMENT_TYPES.some(
+          (type) => type.value === product.sizeGuide?.measurementType
+        )
+          ? product.sizeGuide.measurementType
+          : 'supportGear',
+        unit: product.sizeGuide?.unit === 'inches' ? 'inches' : 'cm',
+        volumeUnit: product.sizeGuide?.volumeUnit === 'L' ? 'L' : 'ml',
+        notes: product.sizeGuide?.notes || product.sizeGuide?.instructions || '',
+        rows: Array.isArray(product.sizeGuide?.rows)
+          ? product.sizeGuide.rows.map((row) => ({
+              ...defaultSizeChartRow,
+              ...row,
+              customFields: Array.isArray(row?.customFields) ? row.customFields : [],
+            }))
+          : [],
+      },
       variants: mappedVariants,
       images: mappedImages,
     });
@@ -880,6 +1029,8 @@ export const ProductsPage = () => {
           title: v?.title ? v.title.trim() : `${v?.size || ''} ${v?.color || ''}`.trim() || 'Standard',
           size: v?.size ? v.size.trim() : 'Standard',
           color: v?.color ? v.color.trim() : 'Standard',
+          volume: v?.volume ? v.volume.trim() : '',
+          volumeUnit: v?.volumeUnit === 'L' ? 'L' : 'ml',
           price: Number(v?.price) || 0,
           compareAtPrice: Number(v?.compareAtPrice) || 0,
           discountNote: v?.discountNote ? v.discountNote.trim() : '',
@@ -903,11 +1054,50 @@ export const ProductsPage = () => {
         tagline: formData.tagline.trim(),
         description: formData.description.trim(),
         badge: formData.badge.trim(),
+        festiveDiscountPercent: Math.min(90, Math.max(0, Number(formData.festiveDiscountPercent) || 0)),
         status: formData.status,
         ageGroup: formData.ageGroup,
         gender: formData.gender,
         tags: parsedTags,
         careInstructions: formData.careInstructions.trim(),
+        sizeGuide: {
+          measurementType: MEASUREMENT_TYPES.some(
+            (type) => type.value === formData.sizeGuide?.measurementType
+          )
+            ? formData.sizeGuide.measurementType
+            : 'supportGear',
+          unit: formData.sizeGuide?.unit === 'inches' ? 'inches' : 'cm',
+          volumeUnit: formData.sizeGuide?.volumeUnit === 'L' ? 'L' : 'ml',
+          notes: String(formData.sizeGuide?.notes || '').trim(),
+          rows: (formData.sizeGuide?.rows || [])
+            .filter((row) => String(row?.size || row?.volume || '').trim())
+            .map((row) => ({
+              size: String(row.size || (row.volume ? `${row.volume} ${row.volumeUnit || 'ml'}` : '')).trim(),
+              fit: String(row.fit || '').trim(),
+              volume: String(row.volume || '').trim(),
+              volumeUnit: row.volumeUnit === 'L'
+                ? 'L'
+                : (formData.sizeGuide?.volumeUnit === 'L' ? 'L' : 'ml'),
+              chest: String(row.chest || '').trim(),
+              waist: String(row.waist || '').trim(),
+              hip: String(row.hip || '').trim(),
+              length: String(row.length || '').trim(),
+              shoulder: String(row.shoulder || '').trim(),
+              sleeveLength: String(row.sleeveLength || '').trim(),
+              width: String(row.width || '').trim(),
+              height: String(row.height || '').trim(),
+              diameter: String(row.diameter || '').trim(),
+              weight: String(row.weight || '').trim(),
+              weightUnit: String(row.weightUnit || '').trim(),
+              material: String(row.material || '').trim(),
+              customFields: (row.customFields || [])
+                .filter((field) => String(field?.label || '').trim())
+                .map((field) => ({
+                  label: String(field.label).trim(),
+                  value: String(field.value || '').trim(),
+                })),
+            })),
+        },
         images: parsedImages,
         variants: parsedVariants,
         price: primaryPrice,
@@ -1207,6 +1397,19 @@ export const ProductsPage = () => {
             <Sliders className="w-3.5 h-3.5" />
             4. Care & Maintenance
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('sizeChart')}
+            className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-all ${
+              activeTab === 'sizeChart'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Ruler className="w-3.5 h-3.5" />
+            5. Size Chart
+          </button>
         </div>
 
         <form onSubmit={handleSaveProduct} className="space-y-4">
@@ -1246,6 +1449,25 @@ export const ProductsPage = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  General Discount (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="90"
+                  step="1"
+                  value={formData.festiveDiscountPercent}
+                  onChange={(e) => setFormData({ ...formData, festiveDiscountPercent: e.target.value })}
+                  placeholder="0"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Applied on top of each variant price. Maximum 90%.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1346,6 +1568,178 @@ export const ProductsPage = () => {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Engineered with heavy-duty elastic compound rubber and premium cotton wrap..."
                   className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'sizeChart' && (
+            <div className="space-y-4 text-xs">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Product Measurements</h3>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Choose the measurement type, then add one row for each selectable option.
+                  </p>
+                </div>
+                <div className="sm:w-56">
+                  <label className="mb-1 block font-semibold uppercase text-slate-700 dark:text-slate-300">
+                    Measurement Type
+                  </label>
+                  <select
+                    value={measurementType}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      sizeGuide: { ...formData.sizeGuide, measurementType: e.target.value },
+                    })}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    {MEASUREMENT_TYPES.map((type) => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:w-36">
+                  <label className="mb-1 block font-semibold uppercase text-slate-700 dark:text-slate-300">
+                    Dimension Unit
+                  </label>
+                  <select
+                    value={formData.sizeGuide?.unit || 'cm'}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      sizeGuide: { ...formData.sizeGuide, unit: e.target.value },
+                    })}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <option value="cm">cm</option>
+                    <option value="inches">inches</option>
+                  </select>
+                </div>
+                {measurementType === 'shaker' && (
+                  <div className="sm:w-32">
+                    <label className="mb-1 block font-semibold uppercase text-slate-700 dark:text-slate-300">
+                      Volume Unit
+                    </label>
+                    <select
+                      value={formData.sizeGuide?.volumeUnit || 'ml'}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        sizeGuide: { ...formData.sizeGuide, volumeUnit: e.target.value },
+                      })}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    >
+                      <option value="ml">ml</option>
+                      <option value="L">L</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <p className="rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+                {MEASUREMENT_TYPES.find((type) => type.value === measurementType)?.description}
+                {measurementType === 'shaker' && ' Volume options can also be entered on each variant in the Variants & SKUs tab.'}
+              </p>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                <table className="min-w-[760px] w-full text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800/80">
+                    <tr>
+                      {[
+                        ...(measurementType === 'supportGear'
+                          ? ['Size', 'Fit / Circumference', 'Length', 'Width', 'Height', 'Weight']
+                          : measurementType === 'shaker'
+                            ? ['Volume', 'Height', 'Diameter', 'Weight', 'Material', 'Unit']
+                            : []),
+                        '',
+                      ].map((heading) => (
+                        <th key={heading} className="px-2 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(formData.sizeGuide?.rows || []).map((row, index) => (
+                      <tr key={`${row.size}-${index}`} className="border-t border-slate-200 dark:border-slate-700">
+                        {[
+                          [measurementType === 'shaker' ? 'volume' : 'size', measurementType === 'shaker' ? 'e.g. 500' : 'e.g. S, M, L, XL'],
+                          ...(measurementType === 'supportGear'
+                            ? [
+                                ['fit', 'e.g. 20-23 cm'],
+                                ['length', 'e.g. 70'],
+                                ['width', 'e.g. 3'],
+                                ['height', 'e.g. 10'],
+                                ['weight', 'e.g. 450'],
+                              ]
+                            : measurementType === 'shaker'
+                              ? [
+                                  ['height', 'e.g. 25'],
+                                  ['diameter', 'e.g. 7'],
+                                  ['weight', 'e.g. 180'],
+                                  ['material', 'e.g. BPA-free'],
+                                ]
+                              : []),
+                        ].map(([field, placeholder]) => (
+                          <td key={field} className="p-2">
+                            <input
+                              list={field === 'size' && measurementType === 'supportGear' ? 'size-chart-presets' : undefined}
+                              value={row[field] || ''}
+                              onChange={(e) => handleUpdateSizeChartRow(index, field, e.target.value)}
+                              placeholder={placeholder}
+                              className="w-full min-w-24 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            />
+                          </td>
+                        ))}
+                        {measurementType === 'shaker' && (
+                          <td className="p-2">
+                            <select
+                              value={row.volumeUnit || formData.sizeGuide?.volumeUnit || 'ml'}
+                              onChange={(e) => handleUpdateSizeChartRow(index, 'volumeUnit', e.target.value)}
+                              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            >
+                              <option value="ml">ml</option>
+                              <option value="L">L</option>
+                            </select>
+                          </td>
+                        )}
+                        <td className="p-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSizeChartRow(index)}
+                            className="rounded-md p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                            aria-label={`Remove ${row.size || 'size'} row`}
+                            title="Remove size"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <datalist id="size-chart-presets">
+                {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((size) => <option key={size} value={size} />)}
+              </datalist>
+
+              <Button type="button" variant="secondary" size="sm" leftIcon={Plus} onClick={handleAddSizeChartRow}>
+                Add {measurementType === 'supportGear' ? 'Support Gear Size' : 'Shaker Volume'}
+              </Button>
+
+              <div>
+                <label className="mb-1 block font-semibold uppercase text-slate-700 dark:text-slate-300">
+                  Additional Notes
+                </label>
+                <textarea
+                  rows={3}
+                  value={formData.sizeGuide?.notes || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    sizeGuide: { ...formData.sizeGuide, notes: e.target.value },
+                  })}
+                  placeholder="Add fitting guidance or measurement instructions..."
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
@@ -1564,10 +1958,35 @@ export const ProductsPage = () => {
                           type="text"
                           value={v.size}
                           onChange={(e) => handleUpdateVariant(idx, 'size', e.target.value)}
-                          placeholder="e.g. M, L, 79 inch"
+                          placeholder={measurementType === 'shaker' ? 'e.g. 500 ml' : 'e.g. S, M, L, XL'}
                           className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
                         />
                       </div>
+
+                      {measurementType === 'shaker' && (
+                        <div>
+                          <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
+                            Volume Option
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={v.volume || ''}
+                              onChange={(e) => handleUpdateVariant(idx, 'volume', e.target.value)}
+                              placeholder="e.g. 500"
+                              className="min-w-0 flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
+                            />
+                            <select
+                              value={v.volumeUnit || 'ml'}
+                              onChange={(e) => handleUpdateVariant(idx, 'volumeUnit', e.target.value)}
+                              className="w-16 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            >
+                              <option value="ml">ml</option>
+                              <option value="L">L</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-[11px] text-slate-500 mb-0.5 font-medium">
